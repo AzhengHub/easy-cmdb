@@ -34,3 +34,9 @@ Radar CMDB 用于集中管理企业 IT 资产、配置和业务关系。技术�
 - 构建产物留在本地。`.env.example` 和 `collectors.example.json` 使用占位值。
 - Go 改动先运行 `gofmt`，再运行 `go test ./...`。前端依赖使用 `npm --prefix web ci` 安装，前端改动运行 `npm --prefix web run check`，涉及打包时运行 `npm --prefix web run build`。
 - 涉及数据库或部署时，用独立的 PostgreSQL 库或单独的 Compose 项目验证。迁移变更同时检查空库安装和旧库升级，确认已有资产可读。采集验证优先用模拟接口或测试环境。
+
+## 开发环境交付
+
+- 每次代码改动完成并通过相关检查后，交付前在本仓库已配置的开发环境重新构建和启动 Web 服务。使用 `docker compose -p radar-cmdb up --build -d --no-deps web`，或在安装了独立命令的宿主机上使用 `docker-compose`。
+- 更新沿用开发环境已有的配置和 PostgreSQL 数据卷。采集代码有改动且开发环境已启用采集时，用同一镜像更新采集服务。
+- 构建并启动后，使用本机 `.env` 配置的访问地址检查 `/healthz`，验证本次改动的入口或主要流程，并在交付时说明开发环境验证结果。

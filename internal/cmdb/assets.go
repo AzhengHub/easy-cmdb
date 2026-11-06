@@ -118,7 +118,7 @@ func ListLinks(ctx context.Context, db *sql.DB, assetID int64) ([]Link, error) {
 
 func ListChanges(ctx context.Context, db *sql.DB, assetID int64) ([]Change, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, asset_id, asset_name, actor, action,
+		SELECT id, COALESCE(asset_id, 0), asset_name, actor, action,
 			COALESCE(before_data, 'null'::jsonb), COALESCE(after_data, 'null'::jsonb), created_at
 		FROM changes WHERE $1=0 OR asset_id=$1 ORDER BY id DESC LIMIT 100`, assetID)
 	if err != nil {
@@ -145,16 +145,8 @@ func SaveAsset(ctx context.Context, db *sql.DB, id int64, version int, fields Fi
 	defer tx.Rollback()
 
 	if id == 0 {
-		asset, err := readAsset(tx.QueryRowContext(ctx, `
-			INSERT INTO assets (kind, name, platform, status, lifecycle, owner, environment, address,
-				cpu, memory_mib, notes, attributes)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING `+assetColumns,
-			fields.Kind, fields.Name, fields.Platform, fields.Status, fields.Lifecycle, fields.Owner,
-			fields.Environment, fields.Address, fields.CPU, fields.MemoryMiB, fields.Notes, fields.Attributes))
+		asset, err := createAsset(ctx, tx, fields, actor)
 		if err != nil {
-			return Asset{}, err
-		}
-		if err := writeChange(ctx, tx, asset, actor, "create", nil, asset.Fields); err != nil {
 			return Asset{}, err
 		}
 		return asset, tx.Commit()
@@ -194,6 +186,19 @@ func SaveAsset(ctx context.Context, db *sql.DB, id int64, version int, fields Fi
 		return Asset{}, err
 	}
 	return asset, tx.Commit()
+}
+
+func createAsset(ctx context.Context, tx *sql.Tx, fields Fields, actor string) (Asset, error) {
+	asset, err := readAsset(tx.QueryRowContext(ctx, `
+		INSERT INTO assets (kind, name, platform, status, lifecycle, owner, environment, address,
+			cpu, memory_mib, notes, attributes)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING `+assetColumns,
+		fields.Kind, fields.Name, fields.Platform, fields.Status, fields.Lifecycle, fields.Owner,
+		fields.Environment, fields.Address, fields.CPU, fields.MemoryMiB, fields.Notes, fields.Attributes))
+	if err != nil {
+		return Asset{}, err
+	}
+	return asset, writeChange(ctx, tx, asset, actor, "create", nil, asset.Fields)
 }
 
 func equalFields(a, b Fields) bool {
@@ -237,7 +242,11 @@ func ChangeLink(ctx context.Context, db *sql.DB, link Link, remove bool, actor s
 	if err != nil {
 		return err
 	}
-	to, err := readAsset(tx.QueryRowContext(ctx, "SELECT "+assetColumns+" FROM assets WHERE id=$1", link.ToID))
+	query := "SELECT " + assetColumns + " FROM assets WHERE id=$1"
+	if !remove && link.Kind == "contains" {
+		query += " FOR UPDATE"
+	}
+	to, err := readAsset(tx.QueryRowContext(ctx, query, link.ToID))
 	if err != nil {
 		return err
 	}
@@ -256,6 +265,15 @@ func ChangeLink(ctx context.Context, db *sql.DB, link Link, remove bool, actor s
 	}
 	if (link.Kind == "hosts" || link.Kind == "member") && to.SourceKey != "" {
 		return ErrManaged
+	}
+	if link.Kind == "contains" {
+		var mounted bool
+		if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM rack_placements WHERE asset_id=$1)", to.ID).Scan(&mounted); err != nil {
+			return err
+		}
+		if mounted {
+			return fmt.Errorf("%w: 请先下架该计算节点，再将其关联到机箱", ErrInvalid)
+		}
 	}
 	err = tx.QueryRowContext(ctx, `
 		INSERT INTO asset_links (from_id,to_id,kind) VALUES ($1,$2,$3) RETURNING id`,
@@ -292,6 +310,10 @@ func ValidLink(kind, from, to string) bool {
 }
 
 func writeChange(ctx context.Context, tx *sql.Tx, asset Asset, actor, action string, before, after any) error {
+	return writeNamedChange(ctx, tx, asset.ID, asset.Name, actor, action, before, after)
+}
+
+func writeNamedChange(ctx context.Context, tx *sql.Tx, assetID any, name, actor, action string, before, after any) error {
 	oldData, err := json.Marshal(before)
 	if err != nil {
 		return err
@@ -302,6 +324,6 @@ func writeChange(ctx context.Context, tx *sql.Tx, asset Asset, actor, action str
 	}
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO changes (asset_id, asset_name, actor, action, before_data, after_data)
-		VALUES ($1,$2,$3,$4,$5,$6)`, asset.ID, asset.Name, actor, action, oldData, newData)
+		VALUES ($1,$2,$3,$4,$5,$6)`, assetID, name, actor, action, oldData, newData)
 	return err
 }

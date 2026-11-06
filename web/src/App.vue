@@ -1,21 +1,26 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import {
   Activity, ArrowDownToLine, ArrowRight, Box, Boxes, ChevronLeft, ChevronRight,
-  Database, HardDrive, History, LayoutGrid, Link2, LogOut, Menu, Monitor,
+  Database, HardDrive, History, LayoutGrid, Link2, LogOut, MapPin, Menu, Monitor,
   Network, Pencil, Plus, Radio, RefreshCw, Search, Server, ShieldCheck, X,
 } from '@lucide/vue'
 import AssetEditor from './AssetEditor.vue'
 import ChangeList from './ChangeList.vue'
 import { api, APIError } from './api'
 import type { Asset, AssetFields, Change, Kind, Link, LinkKind, SyncRun, User } from './api'
+import { assetLocations, locationLabel } from './facilities'
+import type { AssetLocation, Facilities } from './facilities'
 
-type Page = 'overview' | 'host' | 'vm' | 'infrastructure' | 'business' | 'sync' | 'changes'
+const FacilityView = defineAsyncComponent(() => import('./FacilityView.vue'))
+
+type Page = 'overview' | 'host' | 'vm' | 'infrastructure' | 'business' | 'sync' | 'changes' | 'facilities'
 const navigation = [
   { id: 'overview', title: '资源总览', icon: LayoutGrid, description: '查看物理资源、虚拟化平台和业务归属。' },
   { id: 'host', title: '物理机', icon: Server, description: '维护物理硬件、计算节点和宿主机。' },
   { id: 'vm', title: '虚拟机', icon: Monitor, description: '查询虚拟机配置、运行状态和所在宿主机。' },
   { id: 'infrastructure', title: '集群与机箱', icon: Boxes, description: '管理 PVE 集群成员和物理机箱的节点关系。' },
+  { id: 'facilities', title: '机房视图', icon: MapPin, description: '摆放机柜、管理设备 U 位，并在三维布局中定位资产。' },
   { id: 'business', title: '业务管理', icon: Network, description: '维护业务负责人、环境和关联资源。' },
   { id: 'sync', title: '采集状态', icon: Radio, description: '查看各虚拟化平台的采集结果和最后成功时间。' },
   { id: 'changes', title: '变更记录', icon: History, description: '追溯人工修改、配置同步和资源关系变化。' },
@@ -27,6 +32,7 @@ const kinds = {
   cluster: { label: '集群', icon: Boxes },
   vm: { label: '虚拟机', icon: Monitor },
   business: { label: '业务', icon: Network },
+  switch: { label: '交换机', icon: Network },
 }
 const statuses: Record<string, { label: string; tone: string }> = {
   online: { label: '在线', tone: 'green' },
@@ -58,6 +64,8 @@ const assets = ref<Asset[]>([])
 const links = ref<Link[]>([])
 const runs = ref<SyncRun[]>([])
 const changes = ref<Change[]>([])
+const facilities = ref<Facilities>({ rooms: [], racks: [], placements: [] })
+const facilityFocus = ref<AssetLocation | null>(null)
 const assetChanges = ref<Change[]>([])
 const keyword = ref('')
 const platformFilter = ref('')
@@ -80,6 +88,8 @@ const activePage = computed(() => navigation.find(n => n.id === page.value)!)
 const editable = computed(() => user.value?.role !== 'viewer')
 const activeAssets = computed(() => assets.value.filter(a => a.lifecycle === 'active'))
 const byId = computed(() => new Map(assets.value.map(a => [a.id, a])))
+const locations = computed(() => assetLocations(facilities.value, links.value))
+const selectedLocation = computed(() => selected.value && locations.value.get(selected.value.id))
 const runByKey = computed(() => new Map(runs.value.map(run => [run.sourceKey, run])))
 const related = computed(() => links.value.filter(l => l.fromId === selectedId.value || l.toId === selectedId.value))
 const vmRelations = computed(() => {
@@ -193,13 +203,15 @@ async function refresh() {
   busy.value = true
   error.value = ''
   try {
-    const [nextAssets, nextLinks, nextRuns, nextChanges] = await Promise.all([
+    const [nextAssets, nextLinks, nextRuns, nextChanges, nextFacilities] = await Promise.all([
       api<Asset[]>('/assets'), api<Link[]>('/links'), api<SyncRun[]>('/sync-runs'), api<Change[]>('/changes'),
+      api<Facilities>('/facilities'),
     ])
     assets.value = nextAssets
     links.value = nextLinks
     runs.value = nextRuns
     changes.value = nextChanges
+    facilities.value = nextFacilities
     refreshedAt.value = new Date().toISOString()
   } catch (e) {
     report(e)
@@ -229,6 +241,7 @@ async function logout() {
     links.value = []
     runs.value = []
     changes.value = []
+    facilities.value = { rooms: [], racks: [], placements: [] }
     goTo('overview')
   } catch (e) {
     report(e)
@@ -253,6 +266,13 @@ function goTo(next: Page) {
   platformFilter.value = ''
   lifecycleFilter.value = 'active'
   pagination.value = 1
+  facilityFocus.value = null
+}
+
+function showAssetLocation(location: AssetLocation) {
+  closeDrawer()
+  goTo('facilities')
+  facilityFocus.value = location
 }
 function displayDrawer() {
   if (!drawer.value?.open) drawer.value?.showModal()
@@ -419,7 +439,7 @@ function exportCSV() {
             <h1>{{ activePage.title }}</h1>
             <p class="muted">{{ activePage.description }}</p>
           </div>
-          <button v-if="editable && page !== 'changes' && page !== 'sync'" class="button primary" @click="startNew">
+          <button v-if="editable && page !== 'changes' && page !== 'sync' && page !== 'facilities'" class="button primary" @click="startNew">
             <Plus :size="17" /> 新增资产
           </button>
         </div>
@@ -458,6 +478,9 @@ function exportCSV() {
           <div class="panel-heading"><div><h2>审计时间线</h2><p class="muted">最近 100 条变更</p></div><History :size="20" class="muted" /></div>
           <ChangeList :changes="changes" @open="openAsset" />
         </section>
+
+        <FacilityView v-else-if="page === 'facilities'" :layout="facilities" :assets="assets" :links="links"
+          :editable="editable" :focus="facilityFocus" :reload="refresh" @open-asset="openAsset" @session-error="report" />
 
         <section v-else class="panel">
           <div class="panel-heading">
@@ -533,6 +556,10 @@ function exportCSV() {
           <div><dt>数据来源</dt><dd>{{ selected.sourceKey || '人工维护' }}</dd></div>
           <div v-if="selected.externalKey"><dt>外部标识</dt><dd class="mono">{{ selected.externalKey }}</dd></div>
           <div v-if="selected.lastSeenAt"><dt>最近发现</dt><dd>{{ date(selected.lastSeenAt) }}</dd></div>
+          <div v-if="selectedLocation"><dt>机房位置</dt>
+            <dd><button type="button" class="text-button" @click="showAssetLocation(selectedLocation)">{{ locationLabel(selectedLocation) }}</button></dd>
+            <dd v-if="selectedLocation.placement.assetId !== selected.id" class="muted">随 {{ byId.get(selectedLocation.placement.assetId)?.name }} 定位</dd>
+          </div>
         </dl>
         <p v-if="selected.notes" class="detail-notes">{{ selected.notes }}</p>
 

@@ -10,9 +10,11 @@
   },
   "dependencies": {
     "@lucide/vue": "^1.69.0",
+    "three": "^0.187.0",
     "vue": "^3.5.0"
   },
   "devDependencies": {
+    "@types/three": "^0.187.0",
     "@vitejs/plugin-vue": "^6.0.0",
     "typescript": "~5.9.3",
     "vite": "^7.0.0",

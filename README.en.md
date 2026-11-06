@@ -42,6 +42,14 @@ The collector updates resource names, CPU, memory, status, and virtualization re
 
 The current collector covers Proxmox VE QEMU virtual machines and libvirt domains. Guest IPs and hardware serial numbers can be entered manually. Planned work includes iDRAC/Redfish, guest-agent IP discovery, CSV import, and reconciling KVM migrations across data sources.
 
+## Room layouts
+
+Open the room view (`机房视图`), create a named room with a grid size, and add racks with a label, height, grid position, and orientation. Drag racks to vacant cells in the floor plan or edit their coordinates directly. The 3D overview supports rotation, zoom, rack selection, and opening device details.
+
+Use the rack elevation to mount an existing asset or create and mount a physical host, switch, or chassis in one step. Set the starting rack unit and device height. Radar validates overlaps and rack boundaries. Asset details link back to the room and rack, and chassis nodes and virtual machines follow their physical equipment relationships. Unmounting a device keeps its asset record.
+
+Racks occupy grid cells in the room layout. The floor plan, rack elevation, and 3D overview share the same placement data. Room, rack, and placement changes appear in change history.
+
 ## Back up and restore
 
 Run a logical backup daily and copy the resulting dump to separate storage.
