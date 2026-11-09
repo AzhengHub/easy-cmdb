@@ -31,6 +31,38 @@ export interface Link {
   toName: string
 }
 
+export interface SubnetFields {
+  name: string
+  cidr: string
+  gateway: string
+  vlan: string
+  notes: string
+}
+
+export interface Subnet extends SubnetFields {
+  id: number
+  version: number
+  usable: number
+  used: number
+  free: number
+}
+
+export interface IPUsage {
+  ip: string
+  status: 'gateway' | 'asset' | 'allocated'
+  assetId?: number
+  assetName?: string
+  allocationId?: number
+  label?: string
+  notes?: string
+  version?: number
+}
+
+export interface SubnetDetail extends Subnet {
+  usedIps: IPUsage[]
+  freeIps: string[]
+}
+
 export interface Change {
   id: number
   assetId: number

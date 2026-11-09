@@ -2,7 +2,7 @@
 
 [简体中文](README.md)
 
-Easy CMDB is a simple, easy-to-use configuration management database for IT assets, infrastructure configuration, and asset relationships. It targets small, single-node operations: around 3,000 virtual machines with a total footprint under 5,000 hosts, maintained by a small operations team. The design goal is simple, sufficient, and easy to maintain: no extra middleware and no large-cluster ambitions. It tracks physical hosts, virtual machines, and switches, with asset search, relationship views, CSV import and export, access controls, change history, and data center/rack views.
+Easy CMDB is a simple, easy-to-use configuration management database for IT assets, infrastructure configuration, and asset relationships. It targets small, single-node operations: around 3,000 virtual machines with a total footprint under 5,000 hosts, maintained by a small operations team. The design goal is simple, sufficient, and easy to maintain: no extra middleware and no large-cluster ambitions. It tracks physical hosts, virtual machines, and switches, with asset search, relationship views, CSV import and export, IPAM subnet and address management, access controls, change history, and data center/rack views.
 
 Easy CMDB uses Go, Vue 3 with TypeScript, and SQLite. One Go binary, the built `web/dist` assets, and one SQLite file are all it needs; there is no separate database service to deploy. The current release uses SQLite, and a MySQL or PostgreSQL backend can be added later if needed.
 
@@ -103,6 +103,17 @@ Import rules:
 - Successful imports appear in change history under the current account.
 
 Exported CSV files use the same columns and can be used as a reference when preparing an import.
+
+## IP address management
+
+Add a subnet with its CIDR, gateway, and VLAN under `IPAM`. Addresses found in asset `address` fields are counted automatically, and you can also allocate or release IPs and link them to assets.
+
+- IPv4 `/8` through `/30`; overlapping subnets are rejected;
+- Asset addresses may contain multiple IPs separated by commas, semicolons, or spaces;
+- Used addresses include the gateway, asset addresses, and manual allocations;
+- The first 50 free addresses are listed, while the total free count is calculated from the subnet size;
+- The gateway cannot be allocated again, and an address already present in an asset does not need a duplicate allocation;
+- Subnet and IP allocation changes appear in change history.
 
 ## Data center layouts
 

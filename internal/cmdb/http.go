@@ -45,6 +45,7 @@ func NewServer(db *sql.DB, secureCookie bool, frontend http.Handler) http.Handle
 	mux.HandleFunc("DELETE /api/links/{id}", s.requireUser(true, s.deleteLink))
 	mux.HandleFunc("GET /api/changes", s.requireUser(false, s.listChanges))
 	s.registerFacilities(mux)
+	s.registerIPAM(mux)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusNotFound, "接口不存在")
 	})

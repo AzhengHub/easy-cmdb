@@ -45,6 +45,29 @@ CREATE UNIQUE INDEX asset_links_single_parent_idx
 ON asset_links (to_id, kind) WHERE kind = 'hosts';
 CREATE INDEX asset_links_to_idx ON asset_links (to_id);
 
+CREATE TABLE subnets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 160),
+    cidr TEXT NOT NULL UNIQUE,
+    gateway TEXT NOT NULL DEFAULT '',
+    vlan TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    version INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE ip_allocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subnet_id INTEGER NOT NULL REFERENCES subnets ON DELETE CASCADE,
+    ip TEXT NOT NULL,
+    asset_id INTEGER REFERENCES assets,
+    label TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    version INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (subnet_id, ip)
+);
+
+CREATE INDEX ip_allocations_subnet_idx ON ip_allocations (subnet_id, ip);
+
 CREATE TABLE changes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     asset_id INTEGER REFERENCES assets,

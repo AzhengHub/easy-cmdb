@@ -13,13 +13,15 @@ import { assetLocations, locationLabel } from './facilities'
 import type { AssetLocation, Facilities } from './facilities'
 
 const FacilityView = defineAsyncComponent(() => import('./FacilityView.vue'))
+const IpamView = defineAsyncComponent(() => import('./IpamView.vue'))
 
-type Page = 'overview' | 'host' | 'vm' | 'changes' | 'facilities'
+type Page = 'overview' | 'host' | 'vm' | 'ipam' | 'changes' | 'facilities'
 const navigation = [
   { id: 'overview', title: '资源总览', icon: LayoutGrid, description: '查看物理资源和虚拟化资源。' },
   { id: 'host', title: '物理机', icon: Server, description: '维护物理硬件、计算节点和宿主机。' },
   { id: 'vm', title: '虚拟机', icon: Monitor, description: '查询虚拟机配置、运行状态和所在宿主机。' },
   { id: 'facilities', title: '数据中心', icon: MapPin, description: '摆放机柜、管理设备 U 位，并在三维布局中定位资产。' },
+  { id: 'ipam', title: 'IPAM', icon: Network, description: '管理网段、已分配和空闲 IP 地址。' },
   { id: 'changes', title: '变更记录', icon: History, description: '追溯人工修改和资源关系变化。' },
 ] as const
 
@@ -454,7 +456,7 @@ async function importCSV(event: Event) {
             <h1>{{ activePage.title }}</h1>
             <p class="muted">{{ activePage.description }}</p>
           </div>
-          <button v-if="editable && page !== 'changes' && page !== 'facilities'" class="button primary" @click="startNew">
+          <button v-if="editable && page !== 'changes' && page !== 'facilities' && page !== 'ipam'" class="button primary" @click="startNew">
             <Plus :size="17" /> 新增资产
           </button>
         </div>
@@ -479,6 +481,8 @@ async function importCSV(event: Event) {
 
         <FacilityView v-else-if="page === 'facilities'" :layout="facilities" :assets="assets" :links="links"
           :editable="editable" :focus="facilityFocus" :reload="refresh" @open-asset="openAsset" @session-error="report" />
+
+        <IpamView v-else-if="page === 'ipam'" :editable="editable" @session-error="report" />
 
         <section v-else class="panel">
           <div class="panel-heading">
