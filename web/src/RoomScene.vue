@@ -41,7 +41,7 @@ const unitHeight = 0.043
 const homeDirection = new Vector3(.78, .84, .95).normalize()
 const homeRight = new Vector3(0, 1, 0).cross(homeDirection).normalize()
 const homeUp = new Vector3().crossVectors(homeDirection, homeRight)
-const deviceColors: Record<string, number> = { host: 0x3975cc, switch: 0x168e86, chassis: 0x7b58b7 }
+const deviceColors: Record<string, number> = { host: 0x3975cc, switch: 0x168e86 }
 scene.background = new Color(0xeff5fc)
 scene.add(new AmbientLight(0xffffff, 1.65))
 const key = new DirectionalLight(0xffffff, 2.1)

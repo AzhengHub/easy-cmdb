@@ -297,7 +297,7 @@ func facilityDeleteError(err error, message string) error {
 }
 
 func mountable(kind string) bool {
-	return kind == "host" || kind == "switch" || kind == "chassis"
+	return kind == "host" || kind == "switch"
 }
 
 func SavePlacement(ctx context.Context, db *sql.DB, assetID int64, newAsset *Fields, fields PlacementFields, version int, actor string) (RackPlacement, error) {
@@ -322,15 +322,7 @@ func SavePlacement(ctx context.Context, db *sql.DB, assetID int64, newAsset *Fie
 			return RackPlacement{}, err
 		}
 		if !mountable(asset.Kind) || asset.Lifecycle != "active" {
-			return RackPlacement{}, invalidFacility("只能上架在册的物理机、交换机或机箱")
-		}
-		var inChassis bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
-			SELECT 1 FROM asset_links WHERE to_id=$1 AND kind='contains')`, assetID).Scan(&inChassis); err != nil {
-			return RackPlacement{}, err
-		}
-		if inChassis {
-			return RackPlacement{}, invalidFacility("机箱节点随所属机箱定位，请上架机箱")
+			return RackPlacement{}, invalidFacility("只能上架在册的物理机或交换机")
 		}
 		before, err = readPlacement(tx.QueryRowContext(ctx, "SELECT "+placementColumns+" FROM rack_placements WHERE asset_id=$1", assetID))
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {

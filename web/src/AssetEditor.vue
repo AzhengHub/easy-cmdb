@@ -66,7 +66,7 @@ function save() {
         <label>资源类型
           <select v-model="fields.kind" :disabled="!!asset">
             <option value="host">物理机</option><option value="switch">交换机</option><option value="vm">虚拟机</option>
-            <option value="cluster">集群</option><option value="chassis">机箱</option><option value="business">业务</option>
+            <option value="business">业务</option>
           </select>
         </label>
         <label>资源名称<input v-model.trim="fields.name" required maxlength="160" /></label>

@@ -256,15 +256,6 @@ func ChangeLink(ctx context.Context, db *sql.DB, link Link, remove bool, actor s
 	if !ValidLink(link.Kind, from.Kind, to.Kind) {
 		return fmt.Errorf("%w: 所选资源类型与关系不匹配", ErrInvalid)
 	}
-	if link.Kind == "contains" {
-		var mounted bool
-		if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM rack_placements WHERE asset_id=$1)", to.ID).Scan(&mounted); err != nil {
-			return err
-		}
-		if mounted {
-			return fmt.Errorf("%w: 请先下架该计算节点，再将其关联到机箱", ErrInvalid)
-		}
-	}
 	err = tx.QueryRowContext(ctx, `
 		INSERT INTO asset_links (from_id,to_id,kind) VALUES ($1,$2,$3) RETURNING id`,
 		link.FromID, link.ToID, link.Kind).Scan(&link.ID)
@@ -285,10 +276,6 @@ func ChangeLink(ctx context.Context, db *sql.DB, link Link, remove bool, actor s
 
 func ValidLink(kind, from, to string) bool {
 	switch kind {
-	case "contains":
-		return from == "chassis" && to == "host"
-	case "member":
-		return from == "cluster" && to == "host"
 	case "hosts":
 		return from == "host" && to == "vm"
 	case "uses":

@@ -46,9 +46,7 @@ var importHeaderAliases = map[string]string{
 }
 
 var importKinds = map[string]string{
-	"chassis": "chassis", "机箱": "chassis",
 	"host": "host", "物理机": "host", "主机": "host", "宿主机": "host",
-	"cluster": "cluster", "集群": "cluster", "虚拟化集群": "cluster",
 	"vm": "vm", "虚拟机": "vm",
 	"business": "business", "业务": "business",
 	"switch": "switch", "交换机": "switch",
@@ -213,7 +211,7 @@ func decodeImportRow(record []string, columns map[string]int, rowNumber int) (Fi
 	rawKind := value("kind")
 	kind, ok := importKinds[strings.ToLower(rawKind)]
 	if !ok {
-		return Fields{}, importRowError(rowNumber, "资源类型 %q 无效，可用：机箱、物理机、集群、虚拟机、业务、交换机", rawKind)
+		return Fields{}, importRowError(rowNumber, "资源类型 %q 无效，可用：物理机、虚拟机、业务、交换机", rawKind)
 	}
 	name := value("name")
 	if name == "" {

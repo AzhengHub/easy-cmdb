@@ -1,5 +1,5 @@
-export type Kind = 'chassis' | 'host' | 'cluster' | 'vm' | 'business' | 'switch'
-export type LinkKind = 'contains' | 'member' | 'hosts' | 'uses'
+export type Kind = 'host' | 'vm' | 'business' | 'switch'
+export type LinkKind = 'hosts' | 'uses'
 
 export interface AssetFields {
   kind: Kind

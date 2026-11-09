@@ -48,7 +48,6 @@ export interface AssetLocation {
 export const mountKinds = {
   host: '物理机',
   switch: '交换机',
-  chassis: '机箱',
 } as const
 
 export type MountKind = keyof typeof mountKinds
@@ -72,12 +71,10 @@ export function assetLocations(layout: Facilities, links: Link[]) {
     if (rack && room) result.set(placement.assetId, { placement, rack, room })
   }
 
-  // Resolve chassis nodes before their guests so both can follow the physical device.
-  for (const kind of ['contains', 'hosts'] as const) {
-    for (const link of links) {
-      const parent = result.get(link.fromId)
-      if (link.kind === kind && parent && !result.has(link.toId)) result.set(link.toId, parent)
-    }
+  // VMs follow the location of the host that carries them.
+  for (const link of links) {
+    const parent = result.get(link.fromId)
+    if (link.kind === 'hosts' && parent && !result.has(link.toId)) result.set(link.toId, parent)
   }
   return result
 }

@@ -63,9 +63,8 @@ const usedU = computed(() => devices.value.reduce((used, item) => used + item.un
 const byId = computed(() => new Map(props.assets.map(asset => [asset.id, asset])))
 const locations = computed(() => assetLocations(props.layout, props.links))
 const mounted = computed(() => new Map(props.layout.placements.map(placement => [placement.assetId, placement])))
-const chassisNodes = computed(() => new Set(props.links.filter(link => link.kind === 'contains').map(link => link.toId)))
 const candidates = computed(() => props.assets.filter(asset =>
-  asset.lifecycle === 'active' && isMountKind(asset.kind) && !chassisNodes.value.has(asset.id)))
+  asset.lifecycle === 'active' && isMountKind(asset.kind)))
 const searchResults = computed(() => {
   const keyword = search.value.trim().toLowerCase()
   if (!keyword) return []
@@ -532,7 +531,6 @@ function deviceRow(item: Placement) {
 .u-device strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .u-device span { white-space: nowrap; }
 .u-device.switch { background: #ddf5ee; border-color: #acdccc; color: #1d6156; }
-.u-device.chassis { background: #f0e8fc; border-color: #d7c2f3; color: #573882; }
 .u-device[data-focused=true] { outline: 2px solid #b07513; outline-offset: -2px; }
 .rack-devices { border-top: 1px solid var(--line); padding: 5px 12px 9px; }
 .rack-device-row { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 7px 0; border-bottom: 1px solid #edf1f7; font-size: 12px; }

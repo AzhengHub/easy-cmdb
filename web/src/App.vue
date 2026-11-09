@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import {
-  Activity, ArrowDownToLine, ArrowRight, Box, Boxes, ChevronLeft, ChevronRight,
+  Activity, ArrowDownToLine, ArrowRight, ChevronLeft, ChevronRight,
   Database, HardDrive, History, LayoutGrid, Link2, LogOut, MapPin, Menu, Monitor,
   Network, Pencil, Plus, Radio, RefreshCw, Search, Server, ShieldCheck, Upload, X,
 } from '@lucide/vue'
@@ -14,21 +14,18 @@ import type { AssetLocation, Facilities } from './facilities'
 
 const FacilityView = defineAsyncComponent(() => import('./FacilityView.vue'))
 
-type Page = 'overview' | 'host' | 'vm' | 'infrastructure' | 'business' | 'changes' | 'facilities'
+type Page = 'overview' | 'host' | 'vm' | 'business' | 'changes' | 'facilities'
 const navigation = [
   { id: 'overview', title: '资源总览', icon: LayoutGrid, description: '查看物理资源、虚拟化平台和业务归属。' },
   { id: 'host', title: '物理机', icon: Server, description: '维护物理硬件、计算节点和宿主机。' },
   { id: 'vm', title: '虚拟机', icon: Monitor, description: '查询虚拟机配置、运行状态和所在宿主机。' },
-  { id: 'infrastructure', title: '集群与机箱', icon: Boxes, description: '管理 PVE 集群成员和物理机箱的节点关系。' },
   { id: 'facilities', title: '机房视图', icon: MapPin, description: '摆放机柜、管理设备 U 位，并在三维布局中定位资产。' },
   { id: 'business', title: '业务管理', icon: Network, description: '维护业务负责人、环境和关联资源。' },
   { id: 'changes', title: '变更记录', icon: History, description: '追溯人工修改和资源关系变化。' },
 ] as const
 
 const kinds = {
-  chassis: { label: '机箱', icon: Box },
   host: { label: '物理机', icon: Server },
-  cluster: { label: '集群', icon: Boxes },
   vm: { label: '虚拟机', icon: Monitor },
   business: { label: '业务', icon: Network },
   switch: { label: '交换机', icon: Network },
@@ -42,8 +39,6 @@ const statuses: Record<string, { label: string; tone: string }> = {
   unknown: { label: '未知', tone: 'gray' },
 }
 const relations: { kind: LinkKind; from: Kind; to: Kind[]; outgoing: string; incoming: string }[] = [
-  { kind: 'contains', from: 'chassis', to: ['host'], outgoing: '容纳节点', incoming: '所在机箱' },
-  { kind: 'member', from: 'cluster', to: ['host'], outgoing: '集群成员', incoming: '所属集群' },
   { kind: 'hosts', from: 'host', to: ['vm'], outgoing: '承载虚拟机', incoming: '所在宿主机' },
   { kind: 'uses', from: 'business', to: ['host', 'vm'], outgoing: '使用资源', incoming: '所属业务' },
 ]
@@ -104,18 +99,15 @@ const vmRelations = computed(() => {
 })
 const metrics = computed(() => [
   { label: '物理机', count: activeAssets.value.filter(a => a.kind === 'host').length, icon: Server, target: 'host', tone: 'blue',
-    hint: '含独立主机与集群节点' },
+    hint: '独立主机与虚拟化节点' },
   { label: '虚拟机', count: activeAssets.value.filter(a => a.kind === 'vm').length, icon: Monitor, target: 'vm', tone: 'violet',
     hint: activeAssets.value.filter(a => a.kind === 'vm' && a.status === 'running').length + ' 台运行中' },
-  { label: '虚拟化集群', count: activeAssets.value.filter(a => a.kind === 'cluster').length, icon: Boxes, target: 'infrastructure', tone: 'teal',
-    hint: '按集群查看计算节点' },
   { label: '业务', count: activeAssets.value.filter(a => a.kind === 'business').length, icon: Network, target: 'business', tone: 'amber',
     hint: '业务与资源归属' },
 ] as const)
 
 const scope = computed(() => assets.value.filter(asset => {
   if (page.value === 'overview') return !kindFilter.value || asset.kind === kindFilter.value
-  if (page.value === 'infrastructure') return asset.kind === 'chassis' || asset.kind === 'cluster'
   return asset.kind === page.value
 }))
 const filtered = computed(() => {
@@ -294,8 +286,7 @@ async function openAsset(id: number) {
 }
 function startNew() {
   selectedId.value = null
-  newKind.value = page.value === 'infrastructure' ? 'cluster' :
-    page.value === 'vm' || page.value === 'business' ? page.value : 'host'
+  newKind.value = page.value === 'vm' || page.value === 'business' ? page.value : 'host'
   editor.value = true
   drawerError.value = ''
   displayDrawer()

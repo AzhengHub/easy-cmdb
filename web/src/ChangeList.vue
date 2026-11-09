@@ -18,7 +18,7 @@ const fieldLabels: Record<string, string> = {
   attributes: '扩展属性', observed: '采集信息', missingCount: '缺失次数',
   columns: '机房列数', rows: '机房行数', heightU: '机柜高度（U）', column: '机柜所在列', row: '机柜所在行', rotation: '朝向',
 }
-const relationLabels: Record<string, string> = { contains: '容纳', member: '集群成员', hosts: '承载', uses: '使用资源' }
+const relationLabels: Record<string, string> = { hosts: '承载', uses: '使用资源' }
 
 function summary(change: Change) {
   if (change.action === 'move') return String(change.before?.fromName ?? '—') + ' → ' + String(change.after?.fromName ?? '—')

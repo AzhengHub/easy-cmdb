@@ -96,15 +96,15 @@ func TestLinks(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
 
-	chassis, err := SaveAsset(ctx, db, 0, 0, baseFields("chassis", "lab-chassis-01"), "tester")
-	if err != nil {
-		t.Fatalf("create chassis: %v", err)
-	}
 	host, err := SaveAsset(ctx, db, 0, 0, baseFields("host", "lab-host-01"), "tester")
 	if err != nil {
 		t.Fatalf("create host: %v", err)
 	}
-	link := Link{Kind: "contains", FromID: chassis.ID, ToID: host.ID}
+	vm, err := SaveAsset(ctx, db, 0, 0, baseFields("vm", "lab-vm-01"), "tester")
+	if err != nil {
+		t.Fatalf("create vm: %v", err)
+	}
+	link := Link{Kind: "hosts", FromID: host.ID, ToID: vm.ID}
 	if err := ChangeLink(ctx, db, link, false, "tester"); err != nil {
 		t.Fatalf("link: %v", err)
 	}
@@ -112,11 +112,11 @@ func TestLinks(t *testing.T) {
 		t.Fatalf("duplicate link error = %v, want ErrInvalid", err)
 	}
 
-	links, err := ListLinks(ctx, db, chassis.ID)
+	links, err := ListLinks(ctx, db, host.ID)
 	if err != nil || len(links) != 1 {
 		t.Fatalf("list links: %v, %d", err, len(links))
 	}
-	if links[0].FromName != chassis.Name || links[0].ToName != host.Name {
+	if links[0].FromName != host.Name || links[0].ToName != vm.Name {
 		t.Fatalf("unexpected link: %+v", links[0])
 	}
 

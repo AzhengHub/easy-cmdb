@@ -138,7 +138,7 @@ func (s *Server) savePlacement(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !mountable(input.NewAsset.Kind) || input.NewAsset.Lifecycle != "active" {
-			fail(w, http.StatusBadRequest, "只能上架在册的物理机、交换机或机箱")
+			fail(w, http.StatusBadRequest, "只能上架在册的物理机或交换机")
 			return
 		}
 	} else if input.NewAsset != nil {
