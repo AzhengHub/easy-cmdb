@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   Alert, App as AntApp, Button, Card, ConfigProvider, Descriptions,
@@ -7,7 +7,7 @@ import {
 } from 'antd'
 import type { TableColumnsType } from 'antd'
 import {
-  ApartmentOutlined, ApiOutlined, CloudServerOutlined, DatabaseOutlined,
+  ApartmentOutlined, ApiOutlined, AppstoreOutlined, CloudServerOutlined, ClusterOutlined, DatabaseOutlined,
   DesktopOutlined, DownloadOutlined, EditOutlined, GlobalOutlined, HistoryOutlined,
   HomeOutlined, LockOutlined, LogoutOutlined, MenuOutlined, MoonOutlined, PlusOutlined, ReloadOutlined,
   SearchOutlined, SettingOutlined, SunOutlined, UploadOutlined, UserOutlined,
@@ -26,26 +26,8 @@ import { IpamView } from './components/IpamView'
 
 const { Header, Sider, Content } = Layout
 
-type NavLeaf = { key: Page; label: string; icon: ReactNode }
-type NavGroup = { key: string; label: string; icon: ReactNode; children: NavLeaf[] }
-
-const navigation: (NavLeaf | NavGroup)[] = [
-  { key: 'home', label: '首页', icon: <HomeOutlined /> },
-  { key: 'host', label: '物理机', icon: <CloudServerOutlined /> },
-  { key: 'vm', label: '虚拟机', icon: <DesktopOutlined /> },
-  { key: 'switch', label: '交换机', icon: <ApiOutlined /> },
-  { key: 'facilities', label: '数据中心', icon: <ApartmentOutlined /> },
-  { key: 'ipam', label: 'IPAM', icon: <GlobalOutlined /> },
-  {
-    key: 'system', label: '系统管理', icon: <SettingOutlined />,
-    children: [
-      { key: 'changes', label: '变更记录', icon: <HistoryOutlined /> },
-      { key: 'password', label: '更改密码', icon: <LockOutlined /> },
-    ],
-  },
-]
-const navLeaves = navigation.flatMap(item => 'children' in item ? item.children : [item])
-
+type NavLeaf = { key: string; label: ReactNode; icon: ReactNode }
+type NavGroup = { key: string; label: ReactNode; icon: ReactNode; children: NavLeaf[] }
 
 const kinds: Record<Kind, { label: string; icon: ReactNode }> = {
   host: { label: '物理机', icon: <CloudServerOutlined /> },
@@ -145,6 +127,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   const [captchaLoading, setCaptchaLoading] = useState(false)
   const [error, setError] = useState('')
   const [page, setPage] = useState<Page>('home')
+  const [facilityRoomId, setFacilityRoomId] = useState<number | null>(null)
   const [collapsed, setCollapsed] = useState(false)
 
   const [assets, setAssets] = useState<Asset[]>([])
@@ -171,8 +154,47 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   const [relationTarget, setRelationTarget] = useState(0)
   const [facilityFocus, setFacilityFocus] = useState<AssetLocation | null>(null)
 
-  const activePage = navLeaves.find(item => item.key === page)!
+  const navigation = useMemo<(NavLeaf | NavGroup)[]>(() => {
+    const rooms = facilities.rooms
+      .slice()
+      .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
+      .map(room => {
+        const rackCount = facilities.racks.filter(rack => rack.roomId === room.id).length
+        return {
+          key: 'facility:' + room.id,
+          icon: <ClusterOutlined />,
+          label: <span className="nav-tree-label" title={`${room.name} · ${rackCount} 台机柜`}>{room.name}</span>,
+        }
+      })
+    return [
+      { key: 'home', label: '首页', icon: <HomeOutlined /> },
+      { key: 'host', label: '物理机', icon: <CloudServerOutlined /> },
+      { key: 'vm', label: '虚拟机', icon: <DesktopOutlined /> },
+      { key: 'switch', label: '交换机', icon: <ApiOutlined /> },
+      {
+        key: 'facility-group', label: '数据中心', icon: <ApartmentOutlined />,
+        children: [
+          { key: 'facilities', label: '数据中心总览', icon: <AppstoreOutlined /> },
+          ...rooms,
+        ],
+      },
+      { key: 'ipam', label: 'IPAM', icon: <GlobalOutlined /> },
+      {
+        key: 'system', label: '系统管理', icon: <SettingOutlined />,
+        children: [
+          { key: 'changes', label: '变更记录', icon: <HistoryOutlined /> },
+          { key: 'password', label: '更改密码', icon: <LockOutlined /> },
+        ],
+      },
+    ]
+  }, [facilities.rooms, facilities.racks])
+  const navLeaves = navigation.flatMap(item => 'children' in item ? item.children : [item])
+  const activePage = navLeaves.find(item => item.key === page)
+    ?? { key: 'facilities', label: '数据中心', icon: <ApartmentOutlined /> }
+  const selectedRoom = facilities.rooms.find(room => room.id === facilityRoomId)
+  const pageTitle = page === 'facilities' ? (selectedRoom?.name ?? '数据中心') : activePage.label
   const editable = user?.role !== 'viewer'
+
   const byId = useMemo(() => new Map(assets.map(asset => [asset.id, asset])), [assets])
   const locations = useMemo(() => assetLocations(facilities, links), [facilities, links])
   const selected = assets.find(asset => asset.id === selectedId) ?? null
@@ -353,6 +375,11 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
     setLifecycleFilter('active')
     setPagination(1)
     setFacilityFocus(null)
+  }
+
+  function openFacilityRoom(id: number) {
+    setFacilityRoomId(id)
+    goTo('facilities')
   }
 
   function closeDrawer() {
@@ -607,14 +634,28 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
           <span>Easy CMDB</span>
         </div>
         <Menu
-          className="app-menu" mode="inline" selectedKeys={[page]} defaultOpenKeys={['system']}
+          className="app-menu" mode="inline"
+          selectedKeys={[page === 'facilities' ? (facilityRoomId ? 'facility:' + facilityRoomId : 'facilities') : page]}
+          defaultOpenKeys={['facility-group', 'system']}
           items={navigation.map(item => 'children' in item
             ? {
                 key: item.key, icon: item.icon, label: item.label,
                 children: item.children.map(child => ({ key: child.key, icon: child.icon, label: child.label })),
               }
             : { key: item.key, icon: item.icon, label: item.label })}
-          onClick={({ key }) => { if (key !== 'system') goTo(key as Page) }}
+          onClick={({ key }) => {
+            if (key === 'facility-group' || key === 'system') return
+            if (key.startsWith('facility:')) {
+              openFacilityRoom(Number(key.slice('facility:'.length)))
+              return
+            }
+            if (key === 'facilities') {
+              setFacilityRoomId(null)
+              goTo('facilities')
+              return
+            }
+            goTo(key as Page)
+          }}
         />
       </Sider>
 
@@ -642,7 +683,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
         <Content className="app-content">
           <div className="page-header">
             <div>
-              <h1>{activePage.label}</h1>
+              <h1>{pageTitle}</h1>
             </div>
             {(page === 'host' || page === 'vm' || page === 'switch') && editable && (
               <Button type="primary" onClick={startNew}><PlusOutlined /> 新增资产</Button>
@@ -666,6 +707,8 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
           {page === 'facilities' && (
             <FacilityView
+              key={facilityRoomId ?? 'facility-overview'}
+              roomId={facilityRoomId} onRoomChange={setFacilityRoomId}
               layout={facilities} assets={assets} links={links} editable={editable}
               focus={facilityFocus} reload={loadAll} dark={dark}
               onOpenAsset={id => void openAsset(id)}

@@ -1,19 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Alert, Button, Card, Empty, Form, Input, InputNumber, List,
+  Alert, Button, Card, Empty, Form, Input, InputNumber, List, Modal, Progress,
   Popconfirm, Select, Space,
 } from 'antd'
 import {
-  AppstoreOutlined, CloudServerOutlined, PlusOutlined, SearchOutlined, TableOutlined,
+  AppstoreOutlined, CloudServerOutlined, ClusterOutlined, PieChartOutlined, PlusOutlined, SearchOutlined, TableOutlined,
 } from '@ant-design/icons'
 import { api, APIError } from '../api'
 import type { Asset, Link } from '../api'
 import { assetLocations, isMountKind, locationLabel, mountKinds } from '../facilities'
 import type { AssetLocation, Facilities, MountKind, Placement, Rack, RackFields, Room, RoomFields } from '../facilities'
+import { RackCardGrid } from './RackCardGrid'
 import { RackDetailDrawer } from './RackDetailDrawer'
 import { RoomScene } from './RoomScene'
 
 interface Props {
+  roomId: number | null
+  onRoomChange: (id: number) => void
   layout: Facilities
   assets: Asset[]
   links: Link[]
@@ -38,11 +41,10 @@ interface MountDraft {
   units: number
 }
 
-export function FacilityView({ layout, assets, links, editable, dark, focus, reload, onOpenAsset, onSessionError }: Props) {
-  const [roomId, setRoomId] = useState<number | null>(null)
+export function FacilityView({ roomId, onRoomChange, layout, assets, links, editable, dark, focus, reload, onOpenAsset, onSessionError }: Props) {
   const [rackId, setRackId] = useState<number | null>(null)
   const [focused, setFocused] = useState<number | null>(null)
-  const [view, setView] = useState<'floor' | '3d'>('floor')
+  const [view, setView] = useState<'cards' | 'floor' | '3d'>('cards')
   const [roomDraft, setRoomDraft] = useState<RoomDraft | null>(null)
   const [rackDraft, setRackDraft] = useState<RackDraft | null>(null)
   const [mountDraft, setMountDraft] = useState<MountDraft | null>(null)
@@ -50,16 +52,21 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
   const [search, setSearch] = useState('')
+  const [rackKeyword, setRackKeyword] = useState('')
   const [dragRack, setDragRack] = useState<number | null>(null)
   const [rackDrawerOpen, setRackDrawerOpen] = useState(false)
 
   const rooms = layout.rooms
-  const room = rooms.find(item => item.id === roomId)
-  const racks = useMemo(() => layout.racks.filter(item => item.roomId === roomId), [layout.racks, roomId])
+  const activeRoomId = roomId ?? rooms[0]?.id ?? null
+  const room = rooms.find(item => item.id === activeRoomId)
+  const racks = useMemo(() => layout.racks.filter(item => item.roomId === activeRoomId), [layout.racks, activeRoomId])
   const rack = racks.find(item => item.id === rackId)
   const rackIds = useMemo(() => new Set(racks.map(item => item.id)), [racks])
   const roomPlacements = useMemo(() => layout.placements.filter(item => rackIds.has(item.rackId)), [layout.placements, rackIds])
   const devices = roomPlacements.filter(item => item.rackId === rackId)
+  const totalRoomU = racks.reduce((sum, item) => sum + item.heightU, 0)
+  const usedRoomU = roomPlacements.reduce((sum, item) => sum + item.units, 0)
+  const roomUtilization = totalRoomU ? Math.round(usedRoomU / totalRoomU * 100) : 0
   const byId = useMemo(() => new Map(assets.map(asset => [asset.id, asset])), [assets])
   const locations = useMemo(() => assetLocations(layout, links), [layout, links])
   const mounted = useMemo(() => new Map(layout.placements.map(placement => [placement.assetId, placement])), [layout.placements])
@@ -86,8 +93,11 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
   const mountLocation = mountDraft?.assetId ? locations.get(mountDraft.assetId) : undefined
 
   useEffect(() => {
-    if (!rooms.some(item => item.id === roomId)) setRoomId(rooms[0]?.id ?? null)
-  }, [rooms, roomId])
+    if (roomId && !rooms.some(item => item.id === roomId)) {
+      const next = rooms[0]?.id
+      if (next !== undefined) onRoomChange(next)
+    }
+  }, [roomId, rooms, onRoomChange])
 
   useEffect(() => {
     if (!racks.some(item => item.id === rackId)) setRackId(racks[0]?.id ?? null)
@@ -106,10 +116,10 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
   }
 
   function selectRoom(id: number) {
-    if (id === roomId) return
+    if (id === activeRoomId && roomId !== null) return
     resetForms()
     setRackDrawerOpen(false)
-    setRoomId(id)
+    onRoomChange(id)
     setRackId(layout.racks.find(item => item.roomId === id)?.id ?? null)
     setFocused(null)
   }
@@ -135,7 +145,7 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
   function showLocation(location: AssetLocation) {
     resetForms()
     setRackDrawerOpen(false)
-    setRoomId(location.room.id)
+    onRoomChange(location.room.id)
     setRackId(location.rack.id)
     setFocused(location.placement.assetId)
     setView('3d')
@@ -175,7 +185,7 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
     if (!roomDraft) return
     const { id, ...fields } = roomDraft
     void mutate(() => api<Room>(id ? '/rooms/' + id : '/rooms', id ? 'PUT' : 'POST', fields), saved => {
-      setRoomId(saved.id)
+      onRoomChange(saved.id)
       setRoomDraft(null)
     }, '数据中心已保存')
   }
@@ -362,64 +372,6 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
 
   return (
     <div className="facilities">
-      <Card variant="borderless" size="small">
-        <div className="facility-bar">
-          <Space wrap size={8}>
-            <span className="muted">数据中心</span>
-            <Select
-              style={{ width: 200 }} value={roomId ?? undefined} disabled={!rooms.length || busy}
-              placeholder="暂无数据中心" onChange={selectRoom}
-              options={rooms.map(item => ({ value: item.id, label: item.name }))}
-            />
-            {rooms.length > 0 && (
-              <Input
-                style={{ width: 280 }} allowClear placeholder="搜索已上架资产、数据中心或机柜…"
-                prefix={<SearchOutlined />} value={search} onChange={event => setSearch(event.target.value)}
-              />
-            )}
-          </Space>
-          {editable && (
-            <Space wrap>
-              <Button type="primary" disabled={busy} onClick={() => editRoom()}><PlusOutlined /> 新增数据中心</Button>
-              {room && <Button disabled={busy} onClick={() => editRoom(room)}>编辑数据中心</Button>}
-            </Space>
-          )}
-        </div>
-
-        {search.trim() && (
-          <List
-            className="location-results" size="small" dataSource={searchResults}
-            locale={{ emptyText: '暂无匹配的上架位置' }}
-            renderItem={({ asset, location }) => (
-              <List.Item>
-                <Button type="link" className="location-result" onClick={() => showLocation(location)}>
-                  <strong>{asset.name}</strong><span className="muted">{locationLabel(location)}</span>
-                </Button>
-              </List.Item>
-            )}
-          />
-        )}
-
-        {roomDraft && (
-          <Form layout="inline" className="facility-form" onFinish={saveRoom}>
-            <Form.Item label="数据中心名称"><Input value={roomDraft.name} placeholder="例如：北京数据中心" maxLength={160} onChange={event => setRoomDraft({ ...roomDraft, name: event.target.value })} /></Form.Item>
-            <Form.Item label="列数"><InputNumber min={1} max={24} value={roomDraft.columns} onChange={value => setRoomDraft({ ...roomDraft, columns: value ?? 1 })} /></Form.Item>
-            <Form.Item label="行数"><InputNumber min={1} max={24} value={roomDraft.rows} onChange={value => setRoomDraft({ ...roomDraft, rows: value ?? 1 })} /></Form.Item>
-            <Form.Item>
-              <Space>
-                <Button type="primary" htmlType="submit" loading={busy}>保存数据中心</Button>
-                <Button onClick={() => setRoomDraft(null)}>取消</Button>
-                {roomDraft.id && room?.id === roomDraft.id && !racks.length && (
-                  <Popconfirm title="删除该空数据中心？" okText="删除" cancelText="取消" onConfirm={() => removeRoom(room)}>
-                    <Button danger disabled={busy}>删除空数据中心</Button>
-                  </Popconfirm>
-                )}
-              </Space>
-            </Form.Item>
-          </Form>
-        )}
-      </Card>
-
       {error && <Alert type="error" showIcon message={error} />}
       {feedback && <Alert type="success" showIcon message={feedback} />}
 
@@ -431,10 +383,32 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
         </Card>
       ) : (
         <div className="facility-workspace">
+          <div className="dc-summary">
+            <div className="dc-stat">
+              <div className="dc-stat-icon racks"><ClusterOutlined /></div>
+              <div className="dc-stat-copy"><span>机柜数</span><strong>{racks.length}</strong><small>台机柜</small></div>
+            </div>
+            <div className="dc-stat">
+              <div className="dc-stat-icon devices"><CloudServerOutlined /></div>
+              <div className="dc-stat-copy"><span>设备数</span><strong>{roomPlacements.length}</strong><small>台设备</small></div>
+            </div>
+            <div className="dc-stat dc-stat-usage">
+              <div className="dc-stat-icon usage"><PieChartOutlined /></div>
+              <div className="dc-stat-copy"><span>利用率</span><strong>{roomUtilization}%</strong><small>已用 {usedRoomU}U · 空闲 {Math.max(0, totalRoomU - usedRoomU)}U</small></div>
+              <Progress type="circle" percent={roomUtilization} size={64} strokeWidth={8} />
+            </div>
+          </div>
+
           <Card
             variant="borderless" className="floor-panel"
             title={<Space wrap><span>{room.name}</span><span className="muted">{room.columns} 列 × {room.rows} 行 · {racks.length} 台机柜</span></Space>}
-            extra={editable ? <Button size="small" disabled={busy} onClick={() => editRack()}><PlusOutlined /> 新增机柜</Button> : null}
+            extra={editable ? (
+              <Space wrap>
+                <Button size="small" disabled={busy} onClick={() => editRoom()}>新增数据中心</Button>
+                <Button size="small" disabled={busy} onClick={() => editRoom(room)}>编辑数据中心</Button>
+                <Button size="small" type="primary" disabled={busy} onClick={() => editRack()}><PlusOutlined /> 新增机柜</Button>
+              </Space>
+            ) : null}
           >
             {rackDraft && (
               <Form layout="inline" className="facility-form rack-form" onFinish={saveRack}>
@@ -465,21 +439,54 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
 
             <div className="floor-toolbar">
               <Space>
+                <Button type={view === 'cards' ? 'primary' : 'default'} size="small" onClick={() => setView('cards')}><ClusterOutlined /> 机柜视图</Button>
                 <Button type={view === 'floor' ? 'primary' : 'default'} size="small" onClick={() => setView('floor')}><TableOutlined /> 平面布局</Button>
                 <Button type={view === '3d' ? 'primary' : 'default'} size="small" onClick={() => setView('3d')}><AppstoreOutlined /> 3D 总览</Button>
               </Space>
-              {racks.length > 0 && (
-                <Space>
-                  <span className="muted">机柜</span>
-                  <Select
-                    style={{ width: 140 }} value={rackId ?? undefined} disabled={busy} onChange={openRack}
-                    options={racks.map(item => ({ value: item.id, label: item.name }))}
+              <Space wrap>
+                {view === 'cards' ? (
+                  <Input
+                    style={{ width: 300 }} allowClear placeholder="搜索机柜名称…"
+                    prefix={<SearchOutlined />} value={rackKeyword} onChange={event => setRackKeyword(event.target.value)}
                   />
-                </Space>
-              )}
+                ) : (
+                  <Input
+                    style={{ width: 300 }} allowClear placeholder="搜索已上架资产、数据中心或机柜…"
+                    prefix={<SearchOutlined />} value={search} onChange={event => setSearch(event.target.value)}
+                  />
+                )}
+                {view !== 'cards' && racks.length > 0 && (
+                  <Space>
+                    <span className="muted">机柜</span>
+                    <Select
+                      style={{ width: 140 }} value={rackId ?? undefined} disabled={busy} onChange={openRack}
+                      options={racks.map(item => ({ value: item.id, label: item.name }))}
+                    />
+                  </Space>
+                )}
+              </Space>
             </div>
 
-            {view === 'floor' ? (
+            {view !== 'cards' && search.trim() && (
+              <List
+                className="location-results" size="small" dataSource={searchResults}
+                locale={{ emptyText: '暂无匹配的上架位置' }}
+                renderItem={({ asset, location }) => (
+                  <List.Item>
+                    <Button type="link" className="location-result" onClick={() => showLocation(location)}>
+                      <strong>{asset.name}</strong><span className="muted">{locationLabel(location)}</span>
+                    </Button>
+                  </List.Item>
+                )}
+              />
+            )}
+
+            {view === 'cards' ? (
+              <RackCardGrid
+                racks={racks} placements={roomPlacements} assets={byId}
+                keyword={rackKeyword} onOpen={openRack}
+              />
+            ) : view === 'floor' ? (
               <div className="floor-scroll">
                 <div className="floor-grid" style={{ gridTemplateColumns: `repeat(${room.columns}, minmax(54px, 1fr))` }}>
                   {cells.map(cell => (
@@ -516,6 +523,45 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
 
         </div>
       )}
+      <Modal
+        open={!!roomDraft} title={roomDraft?.id ? '编辑数据中心' : '新增数据中心'}
+        footer={null} width={520} destroyOnHidden
+        onCancel={() => setRoomDraft(null)}
+      >
+        {roomDraft && (
+          <Form layout="vertical" onFinish={saveRoom}>
+            <Form.Item
+              label="数据中心名称" required
+              rules={[{ required: true, message: '请输入数据中心名称' }]}
+            >
+              <Input
+                value={roomDraft.name} placeholder="例如：北京数据中心" maxLength={160}
+                onChange={event => setRoomDraft({ ...roomDraft, name: event.target.value })}
+              />
+            </Form.Item>
+            <Space size="large">
+              <Form.Item label="列数">
+                <InputNumber min={1} max={24} value={roomDraft.columns} onChange={value => setRoomDraft({ ...roomDraft, columns: value ?? 1 })} />
+              </Form.Item>
+              <Form.Item label="行数">
+                <InputNumber min={1} max={24} value={roomDraft.rows} onChange={value => setRoomDraft({ ...roomDraft, rows: value ?? 1 })} />
+              </Form.Item>
+            </Space>
+            <div className="room-modal-actions">
+              <Space>
+                <Button type="primary" htmlType="submit" loading={busy}>保存数据中心</Button>
+                <Button onClick={() => setRoomDraft(null)}>取消</Button>
+                {roomDraft.id && room?.id === roomDraft.id && !racks.length && (
+                  <Popconfirm title="删除该空数据中心？" okText="删除" cancelText="取消" onConfirm={() => removeRoom(room)}>
+                    <Button danger disabled={busy}>删除空数据中心</Button>
+                  </Popconfirm>
+                )}
+              </Space>
+            </div>
+          </Form>
+        )}
+      </Modal>
+
       <RackDetailDrawer
         open={rackDrawerOpen} rack={rack ?? null} room={room ?? null}
         devices={devices} assets={byId} editable={editable} busy={busy}
