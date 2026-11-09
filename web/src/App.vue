@@ -3,18 +3,18 @@ import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import {
   Activity, ArrowDownToLine, ArrowRight, Box, Boxes, ChevronLeft, ChevronRight,
   Database, HardDrive, History, LayoutGrid, Link2, LogOut, MapPin, Menu, Monitor,
-  Network, Pencil, Plus, Radio, RefreshCw, Search, Server, ShieldCheck, X,
+  Network, Pencil, Plus, Radio, RefreshCw, Search, Server, ShieldCheck, Upload, X,
 } from '@lucide/vue'
 import AssetEditor from './AssetEditor.vue'
 import ChangeList from './ChangeList.vue'
-import { api, APIError } from './api'
-import type { Asset, AssetFields, Change, Kind, Link, LinkKind, SyncRun, User } from './api'
+import { api, apiCSV, APIError } from './api'
+import type { Asset, AssetFields, Change, Kind, Link, LinkKind, User } from './api'
 import { assetLocations, locationLabel } from './facilities'
 import type { AssetLocation, Facilities } from './facilities'
 
 const FacilityView = defineAsyncComponent(() => import('./FacilityView.vue'))
 
-type Page = 'overview' | 'host' | 'vm' | 'infrastructure' | 'business' | 'sync' | 'changes' | 'facilities'
+type Page = 'overview' | 'host' | 'vm' | 'infrastructure' | 'business' | 'changes' | 'facilities'
 const navigation = [
   { id: 'overview', title: '资源总览', icon: LayoutGrid, description: '查看物理资源、虚拟化平台和业务归属。' },
   { id: 'host', title: '物理机', icon: Server, description: '维护物理硬件、计算节点和宿主机。' },
@@ -22,8 +22,7 @@ const navigation = [
   { id: 'infrastructure', title: '集群与机箱', icon: Boxes, description: '管理 PVE 集群成员和物理机箱的节点关系。' },
   { id: 'facilities', title: '机房视图', icon: MapPin, description: '摆放机柜、管理设备 U 位，并在三维布局中定位资产。' },
   { id: 'business', title: '业务管理', icon: Network, description: '维护业务负责人、环境和关联资源。' },
-  { id: 'sync', title: '采集状态', icon: Radio, description: '查看各虚拟化平台的采集结果和最后成功时间。' },
-  { id: 'changes', title: '变更记录', icon: History, description: '追溯人工修改、配置同步和资源关系变化。' },
+  { id: 'changes', title: '变更记录', icon: History, description: '追溯人工修改和资源关系变化。' },
 ] as const
 
 const kinds = {
@@ -62,7 +61,6 @@ const page = ref<Page>('overview')
 const menuOpen = ref(false)
 const assets = ref<Asset[]>([])
 const links = ref<Link[]>([])
-const runs = ref<SyncRun[]>([])
 const changes = ref<Change[]>([])
 const facilities = ref<Facilities>({ rooms: [], racks: [], placements: [] })
 const facilityFocus = ref<AssetLocation | null>(null)
@@ -81,6 +79,8 @@ const showRelationForm = ref(false)
 const relationChoice = ref('')
 const relationTarget = ref(0)
 const refreshedAt = ref('')
+const importInput = ref<HTMLInputElement>()
+const importing = ref(false)
 let toastTimeout = 0
 
 const selected = computed(() => assets.value.find(a => a.id === selectedId.value) ?? null)
@@ -90,7 +90,6 @@ const activeAssets = computed(() => assets.value.filter(a => a.lifecycle === 'ac
 const byId = computed(() => new Map(assets.value.map(a => [a.id, a])))
 const locations = computed(() => assetLocations(facilities.value, links.value))
 const selectedLocation = computed(() => selected.value && locations.value.get(selected.value.id))
-const runByKey = computed(() => new Map(runs.value.map(run => [run.sourceKey, run])))
 const related = computed(() => links.value.filter(l => l.fromId === selectedId.value || l.toId === selectedId.value))
 const vmRelations = computed(() => {
   const data = new Map<number, string[]>()
@@ -103,7 +102,6 @@ const vmRelations = computed(() => {
   }
   return data
 })
-const failedRuns = computed(() => runs.value.filter(r => r.status === 'failed').length)
 const metrics = computed(() => [
   { label: '物理机', count: activeAssets.value.filter(a => a.kind === 'host').length, icon: Server, target: 'host', tone: 'blue',
     hint: '含独立主机与集群节点' },
@@ -125,7 +123,7 @@ const filtered = computed(() => {
   return scope.value.filter(a => {
     if (lifecycleFilter.value && a.lifecycle !== lifecycleFilter.value) return false
     if (platformFilter.value && a.platform !== platformFilter.value) return false
-    return !query || [a.name, a.address, a.owner, a.environment, a.externalKey, a.sourceKey, ...(vmRelations.value.get(a.id) ?? [])]
+    return !query || [a.name, a.address, a.owner, a.environment, ...(vmRelations.value.get(a.id) ?? [])]
       .some(value => value?.toLowerCase().includes(query))
   })
 })
@@ -141,8 +139,7 @@ const relationOptions = computed(() => {
   return relations.flatMap(relation => {
     const items: { id: string; label: string; direction: 'out' | 'in'; relation: typeof relation }[] = []
     if (relation.from === a.kind) items.push({ id: relation.kind + '-out', label: relation.outgoing, direction: 'out', relation })
-    const managed = a.sourceKey && (relation.kind === 'hosts' || relation.kind === 'member')
-    if (relation.to.includes(a.kind) && !managed) items.push({ id: relation.kind + '-in', label: relation.incoming, direction: 'in', relation })
+    if (relation.to.includes(a.kind)) items.push({ id: relation.kind + '-in', label: relation.incoming, direction: 'in', relation })
     return items
   })
 })
@@ -154,7 +151,6 @@ const targets = computed(() => {
   return activeAssets.value.filter(a => {
     if (a.id === selectedId.value) return false
     if (direction === 'in') return a.kind === relation.from
-    if (a.sourceKey && (relation.kind === 'hosts' || relation.kind === 'member')) return false
     return relation.to.includes(a.kind)
   })
 })
@@ -168,8 +164,6 @@ function platform(asset: { platform: string }) {
 }
 function status(asset: Asset) {
   if (asset.lifecycle === 'retired') return { label: '已退役', tone: 'gray' }
-  if (asset.missingCount >= 2) return { label: '待核查', tone: 'amber' }
-  if (asset.sourceKey && runByKey.value.get(asset.sourceKey)?.status === 'failed') return { label: '数据过期', tone: 'amber' }
   return statuses[asset.status] ?? statuses.unknown
 }
 function relationLabel(link: Link) {
@@ -203,13 +197,12 @@ async function refresh() {
   busy.value = true
   error.value = ''
   try {
-    const [nextAssets, nextLinks, nextRuns, nextChanges, nextFacilities] = await Promise.all([
-      api<Asset[]>('/assets'), api<Link[]>('/links'), api<SyncRun[]>('/sync-runs'), api<Change[]>('/changes'),
+    const [nextAssets, nextLinks, nextChanges, nextFacilities] = await Promise.all([
+      api<Asset[]>('/assets'), api<Link[]>('/links'), api<Change[]>('/changes'),
       api<Facilities>('/facilities'),
     ])
     assets.value = nextAssets
     links.value = nextLinks
-    runs.value = nextRuns
     changes.value = nextChanges
     facilities.value = nextFacilities
     refreshedAt.value = new Date().toISOString()
@@ -239,7 +232,6 @@ async function logout() {
     user.value = null
     assets.value = []
     links.value = []
-    runs.value = []
     changes.value = []
     facilities.value = { rooms: [], racks: [], placements: [] }
     goTo('overview')
@@ -358,32 +350,70 @@ async function updateLink(removeId?: number) {
     if (!user.value) closeDrawer()
   }
 }
-function exportCSV() {
-  function cell(input: string | number) {
-    const text = String(input)
-    const safe = /^[\s\uFEFF]*[=+\-@]|^[\t\r\n]/.test(text) ? "'" + text : text
-    return '"' + safe.replaceAll('"', '""') + '"'
-  }
-  const rows = [['资源名称', '类型', '平台', '状态', '地址 / IP', 'CPU', '内存 MiB', '负责人', '环境']]
-  for (const a of filtered.value) {
-    rows.push([a.name, kinds[a.kind].label, platform(a), status(a).label, a.address, String(a.cpu), String(a.memoryMiB), a.owner, a.environment])
-  }
-  const csv = '\uFEFF' + rows.map(row => row.map(cell).join(',')).join('\r\n')
+function csvCell(input: string | number) {
+  const text = String(input)
+  const safe = /^[\s\uFEFF]*[=+\-@]|^[\t\r\n]/.test(text) ? "'" + text : text
+  return '"' + safe.replaceAll('"', '""') + '"'
+}
+function downloadCSV(filename: string, rows: (string | number)[][]) {
+  const csv = '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n')
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
   const link = document.createElement('a')
   link.href = url
-  link.download = 'radar-cmdb-assets.csv'
+  link.download = filename
   link.click()
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+function exportCSV() {
+  const rows: (string | number)[][] = [[
+    '资源名称', '类型', '平台', '状态', '生命周期', '地址 / IP', 'CPU', '内存 MiB', '负责人', '环境', '备注', '扩展属性',
+  ]]
+  for (const a of filtered.value) {
+    rows.push([
+      a.name, kinds[a.kind].label, platform(a), statuses[a.status]?.label ?? '未知',
+      a.lifecycle === 'retired' ? '已退役' : '在册', a.address, a.cpu, a.memoryMiB, a.owner, a.environment,
+      a.notes, JSON.stringify(a.attributes),
+    ])
+  }
+  downloadCSV('easy-cmdb-assets.csv', rows)
+}
+function downloadTemplate() {
+  downloadCSV('easy-cmdb-import-template.csv', [[
+    '资源名称', '类型', '平台', '状态', '生命周期', '地址 / IP', 'CPU', '内存 MiB', '负责人', '环境', '备注', '扩展属性',
+  ]])
+}
+function triggerImport() {
+  importInput.value?.click()
+}
+async function importCSV(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (file.size > 16 * 1024 * 1024) {
+    error.value = 'CSV 文件不能超过 16 MiB'
+    return
+  }
+  importing.value = true
+  error.value = ''
+  try {
+    const result = await apiCSV<{ imported: number }>('/assets/import', file)
+    await refresh()
+    notify(`已导入 ${result.imported} 条资产`)
+  } catch (e) {
+    report(e)
+  } finally {
+    importing.value = false
+  }
 }
 </script>
 
 <template>
-  <div v-if="checking" class="login-shell"><div class="loading"><Radio :size="24" /> 正在连接 Radar CMDB…</div></div>
+  <div v-if="checking" class="login-shell"><div class="loading"><Radio :size="24" /> 正在连接 Easy CMDB…</div></div>
   <main v-else-if="!user" class="login-shell">
     <div class="login-decoration" aria-hidden="true"><div></div><div></div><div></div></div>
     <div class="login-card">
-      <div class="login-brand"><span class="brand-mark"><Radio :size="24" /></span> Radar CMDB</div>
+      <div class="login-brand"><span class="brand-mark"><Radio :size="24" /></span> Easy CMDB</div>
       <p class="eyebrow login-kicker">INFRASTRUCTURE INVENTORY</p>
       <h1>登录资源管理台</h1>
       <p class="muted">统一管理基础设施、虚拟机与业务关系。</p>
@@ -402,14 +432,13 @@ function exportCSV() {
     <aside class="sidebar" :class="{ 'mobile-open': menuOpen }">
       <button class="brand" @click="goTo('overview')">
         <span class="brand-mark"><Radio :size="23" /></span>
-        <span>Radar CMDB<small>基础设施管理</small></span>
+        <span>Easy CMDB<small>基础设施管理</small></span>
       </button>
       <p class="nav-label">工作区</p>
       <nav aria-label="主导航">
         <button v-for="item in navigation" :key="item.id" class="nav-item" :class="{ active: page === item.id }"
           :aria-current="page === item.id ? 'page' : undefined" @click="goTo(item.id)">
           <component :is="item.icon" :size="17" /><span>{{ item.title }}</span>
-          <span v-if="item.id === 'sync' && failedRuns" class="nav-count">{{ failedRuns }}</span>
         </button>
       </nav>
       <div class="sidebar-foot"><span class="live-dot"></span> 资产管理工作区</div>
@@ -439,7 +468,7 @@ function exportCSV() {
             <h1>{{ activePage.title }}</h1>
             <p class="muted">{{ activePage.description }}</p>
           </div>
-          <button v-if="editable && page !== 'changes' && page !== 'sync' && page !== 'facilities'" class="button primary" @click="startNew">
+          <button v-if="editable && page !== 'changes' && page !== 'facilities'" class="button primary" @click="startNew">
             <Plus :size="17" /> 新增资产
           </button>
         </div>
@@ -457,24 +486,7 @@ function exportCSV() {
           </button>
         </section>
 
-        <section v-if="page === 'sync'" class="panel">
-          <div class="panel-heading"><div><h2>数据源</h2><p class="muted">显示最近一次采集结果</p></div></div>
-          <div v-if="!runs.length" class="empty-state">
-            <Radio :size="28" /><h3>暂无采集结果</h3><p>启动并配置采集进程后，结果会显示在这里。</p>
-          </div>
-          <div v-else class="table-scroll">
-            <table>
-              <thead><tr><th>数据源</th><th>平台</th><th>状态</th><th>资源数</th><th>最后尝试</th><th>最后成功</th><th>说明</th></tr></thead>
-              <tbody><tr v-for="run in runs" :key="run.sourceKey">
-                <td><strong>{{ run.sourceKey }}</strong></td><td>{{ platform(run) }}</td>
-                <td><span class="tag" :class="run.status === 'ok' ? 'green' : 'red'">{{ run.status === 'ok' ? '成功' : '失败' }}</span></td>
-                <td>{{ run.resourceCount }}</td><td>{{ date(run.finishedAt) }}</td><td>{{ date(run.lastSuccessAt) }}</td><td>{{ run.message || '—' }}</td>
-              </tr></tbody>
-            </table>
-          </div>
-        </section>
-
-        <section v-else-if="page === 'changes'" class="panel">
+        <section v-if="page === 'changes'" class="panel">
           <div class="panel-heading"><div><h2>审计时间线</h2><p class="muted">最近 100 条变更</p></div><History :size="20" class="muted" /></div>
           <ChangeList :changes="changes" @open="openAsset" />
         </section>
@@ -485,7 +497,14 @@ function exportCSV() {
         <section v-else class="panel">
           <div class="panel-heading">
             <div><h2>{{ page === 'overview' ? '资源台账' : '资源列表' }}</h2><p class="muted">共 {{ filtered.length }} 条记录</p></div>
-            <button class="button" :disabled="!filtered.length" @click="exportCSV"><ArrowDownToLine :size="16" /> 导出 CSV</button>
+            <div class="heading-actions">
+              <button v-if="editable" class="button" :disabled="importing" @click="triggerImport">
+                <Upload :size="16" /> {{ importing ? '导入中…' : '导入 CSV' }}
+              </button>
+              <button v-if="editable" class="button" @click="downloadTemplate">下载模板</button>
+              <button class="button" :disabled="!filtered.length" @click="exportCSV"><ArrowDownToLine :size="16" /> 导出 CSV</button>
+            </div>
+            <input ref="importInput" type="file" accept=".csv,text/csv" hidden @change="importCSV" />
           </div>
           <div class="filters">
             <label class="search"><Search :size="17" /><input v-model="keyword" aria-label="搜索资源" placeholder="搜索名称、IP、业务、宿主机…" /></label>
@@ -553,9 +572,6 @@ function exportCSV() {
           <div><dt>环境</dt><dd>{{ selected.environment || '—' }}</dd></div>
           <div><dt>管理地址 / IP</dt><dd class="mono">{{ selected.address || '—' }}</dd></div>
           <div v-if="selected.kind === 'host' || selected.kind === 'vm'"><dt>CPU / 内存</dt><dd>{{ selected.cpu || '—' }} 核 · {{ selected.memoryMiB ? selected.memoryMiB / 1024 + ' GiB' : '—' }}</dd></div>
-          <div><dt>数据来源</dt><dd>{{ selected.sourceKey || '人工维护' }}</dd></div>
-          <div v-if="selected.externalKey"><dt>外部标识</dt><dd class="mono">{{ selected.externalKey }}</dd></div>
-          <div v-if="selected.lastSeenAt"><dt>最近发现</dt><dd>{{ date(selected.lastSeenAt) }}</dd></div>
           <div v-if="selectedLocation"><dt>机房位置</dt>
             <dd><button type="button" class="text-button" @click="showAssetLocation(selectedLocation)">{{ locationLabel(selectedLocation) }}</button></dd>
             <dd v-if="selectedLocation.placement.assetId !== selected.id" class="muted">随 {{ byId.get(selectedLocation.placement.assetId)?.name }} 定位</dd>
@@ -577,16 +593,14 @@ function exportCSV() {
           <div v-for="link in related" :key="link.id" class="relation-row">
             <span class="tag gray">{{ relationLabel(link) }}</span>
             <button class="text-button" @click="openAsset(relatedId(link))">{{ byId.get(relatedId(link))?.name }}</button>
-            <span v-if="link.sourceKey" class="muted relation-action">自动同步</span>
-            <button v-else-if="editable" class="text-button muted relation-action" :disabled="saving" @click="updateLink(link.id)">解除</button>
+            <button v-if="editable" class="text-button muted relation-action" :disabled="saving" @click="updateLink(link.id)">解除</button>
           </div>
         </section>
 
-        <section v-if="Object.keys(selected.attributes).length || Object.keys(selected.observed).length" class="detail-section">
+        <section v-if="Object.keys(selected.attributes).length" class="detail-section">
           <div class="detail-heading"><h3><HardDrive :size="17" /> 扩展信息</h3></div>
           <dl class="attribute-list">
             <div v-for="(value, key) in selected.attributes" :key="'a-' + key"><dt>{{ key }}</dt><dd>{{ typeof value === 'object' ? JSON.stringify(value) : value }}</dd></div>
-            <div v-for="(value, key) in selected.observed" :key="'o-' + key"><dt>{{ key }} <span class="tag blue">采集</span></dt><dd>{{ typeof value === 'object' ? JSON.stringify(value) : value }}</dd></div>
           </dl>
         </section>
 

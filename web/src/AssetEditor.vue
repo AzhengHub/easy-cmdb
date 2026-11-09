@@ -61,7 +61,6 @@ function save() {
       <button type="button" class="icon-button" aria-label="关闭编辑" @click="emit('cancel')"><X :size="19" /></button>
     </div>
     <div class="drawer-body">
-      <p v-if="asset?.sourceKey" class="notice">配置由 {{ asset.sourceKey }} 同步。业务资料和扩展属性可在这里维护。</p>
       <p v-if="validation || error" class="error" role="alert">{{ validation || error }}</p>
       <div class="form-grid">
         <label>资源类型
@@ -70,14 +69,14 @@ function save() {
             <option value="cluster">集群</option><option value="chassis">机箱</option><option value="business">业务</option>
           </select>
         </label>
-        <label>资源名称<input v-model.trim="fields.name" :disabled="!!asset?.sourceKey" required maxlength="160" /></label>
+        <label>资源名称<input v-model.trim="fields.name" required maxlength="160" /></label>
         <label>平台
-          <select v-model="fields.platform" :disabled="!!asset?.sourceKey">
+          <select v-model="fields.platform">
             <option value="">未指定</option><option value="pve">Proxmox VE</option><option value="kvm">KVM / libvirt</option>
           </select>
         </label>
         <label>状态
-          <select v-model="fields.status" :disabled="!!asset?.sourceKey">
+          <select v-model="fields.status">
             <option value="unknown">未知</option><option value="online">在线</option><option value="offline">离线</option>
             <option value="running">运行中</option><option value="stopped">已停止</option><option value="paused">已暂停</option>
           </select>
@@ -85,8 +84,8 @@ function save() {
         <label>负责人<input v-model.trim="fields.owner" maxlength="160" placeholder="姓名或团队" /></label>
         <label>环境<input v-model.trim="fields.environment" maxlength="40" placeholder="例如：生产" /></label>
         <label class="wide">管理地址 / IP<input v-model.trim="fields.address" maxlength="160" placeholder="例如：192.0.2.11" /></label>
-        <label>CPU 核数 / vCPU<input v-model.number="fields.cpu" type="number" min="0" max="65536" :disabled="!!asset?.sourceKey" /></label>
-        <label>内存（MiB）<input v-model.number="fields.memoryMiB" type="number" min="0" max="1073741824" :disabled="!!asset?.sourceKey" /></label>
+        <label>CPU 核数 / vCPU<input v-model.number="fields.cpu" type="number" min="0" max="65536" /></label>
+        <label>内存（MiB）<input v-model.number="fields.memoryMiB" type="number" min="0" max="1073741824" /></label>
         <label v-if="asset" class="wide">生命周期
           <select v-model="fields.lifecycle"><option value="active">在册</option><option value="retired">已退役</option></select>
         </label>

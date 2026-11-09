@@ -25,29 +25,30 @@ profile.cov
 go.work
 go.work.sum
 
-# Local environment variables and credentials
-.env
-.env.*
-!.env.example
+# Local configuration and credentials
+/config.yaml
 
 # Editor/IDE
 # .idea/
 # .vscode/
 
-# Local build and dependency files
+# Local toolchain and build files
+/.tools/
 /bin/
-/radar
+/easy
+
+# Local SQLite databases
+/.data/
+*.db
+*.db-shm
+*.db-wal
 /web/node_modules/
 /web/dist/
 *.tsbuildinfo
 npm-debug.log*
 
-# Private collector configuration and keys
-/collectors.json
-/collector-data/
-
 # Local demo data, database backups, and asset exports
 /demo-data/
 *.dump
 /backups/
-/radar-cmdb-assets.csv
+/easy-cmdb-assets.csv

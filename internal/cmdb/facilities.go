@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type RoomFields struct {
@@ -116,16 +114,10 @@ func ListFacilities(ctx context.Context, db *sql.DB) (Facilities, error) {
 }
 
 func facilityTx(ctx context.Context, db *sql.DB) (*sql.Tx, error) {
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	// Serialize the cross-row checks for room bounds, rack capacity, and occupied U positions.
-	if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(5843204)"); err != nil {
-		tx.Rollback()
-		return nil, err
-	}
-	return tx, nil
+	// Open() configures immediate transactions, so the cross-row checks for
+	// room bounds, rack capacity, and occupied U positions cannot interleave
+	// with another writer.
+	return db.BeginTx(ctx, nil)
 }
 
 func invalidFacility(message string) error {
@@ -133,8 +125,7 @@ func invalidFacility(message string) error {
 }
 
 func facilityUniqueError(err error, message string) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+	if isUniqueViolation(err) {
 		return invalidFacility(message)
 	}
 	return err
@@ -299,8 +290,7 @@ func DeleteRack(ctx context.Context, db *sql.DB, id int64, version int, actor st
 }
 
 func facilityDeleteError(err error, message string) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+	if isForeignKeyViolation(err) {
 		return invalidFacility(message)
 	}
 	return err
@@ -327,7 +317,7 @@ func SavePlacement(ctx context.Context, db *sql.DB, assetID int64, newAsset *Fie
 	var before RackPlacement
 	var asset Asset
 	if newAsset == nil {
-		asset, err = readAsset(tx.QueryRowContext(ctx, "SELECT "+assetColumns+" FROM assets WHERE id=$1 FOR UPDATE", assetID))
+		asset, err = readAsset(tx.QueryRowContext(ctx, "SELECT "+assetColumns+" FROM assets WHERE id=$1", assetID))
 		if err != nil {
 			return RackPlacement{}, err
 		}
@@ -356,7 +346,7 @@ func SavePlacement(ctx context.Context, db *sql.DB, assetID int64, newAsset *Fie
 
 	var overlap bool
 	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM rack_placements
-		WHERE rack_id=$1 AND asset_id<>$2 AND start_u<$3::integer+$4::integer AND start_u+units>$3)`,
+		WHERE rack_id=$1 AND asset_id<>$2 AND start_u<$3+$4 AND start_u+units>$3)`,
 		rack.ID, assetID, fields.StartU, fields.Units).Scan(&overlap); err != nil {
 		return RackPlacement{}, err
 	}
@@ -370,11 +360,12 @@ func SavePlacement(ctx context.Context, db *sql.DB, assetID int64, newAsset *Fie
 		}
 	}
 
+	nextVersion := before.Version + 1
 	placement, err := readPlacement(tx.QueryRowContext(ctx, `
-		INSERT INTO rack_placements (asset_id,rack_id,start_u,units) VALUES ($1,$2,$3,$4)
+		INSERT INTO rack_placements (asset_id,rack_id,start_u,units,version) VALUES ($1,$2,$3,$4,$5)
 		ON CONFLICT (asset_id) DO UPDATE SET rack_id=EXCLUDED.rack_id,start_u=EXCLUDED.start_u,
 			units=EXCLUDED.units,version=EXCLUDED.version
-		RETURNING `+placementColumns, asset.ID, rack.ID, fields.StartU, fields.Units))
+		RETURNING `+placementColumns, asset.ID, rack.ID, fields.StartU, fields.Units, nextVersion))
 	if err != nil {
 		return RackPlacement{}, err
 	}
@@ -394,7 +385,7 @@ func DeletePlacement(ctx context.Context, db *sql.DB, assetID int64, version int
 		return err
 	}
 	defer tx.Rollback()
-	asset, err := readAsset(tx.QueryRowContext(ctx, "SELECT "+assetColumns+" FROM assets WHERE id=$1 FOR UPDATE", assetID))
+	asset, err := readAsset(tx.QueryRowContext(ctx, "SELECT "+assetColumns+" FROM assets WHERE id=$1", assetID))
 	if err != nil {
 		return err
 	}

@@ -8,12 +8,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var ErrConflict = errors.New("记录已被更新，请刷新后重试")
-var ErrManaged = errors.New("此记录由数据源维护")
 
 type Fields struct {
 	Kind        string          `json:"kind"`
@@ -71,9 +68,12 @@ type scanner interface{ Scan(...any) error }
 
 func readAsset(row scanner) (Asset, error) {
 	var a Asset
+	var attributes, observed string
 	err := row.Scan(&a.ID, &a.Kind, &a.Name, &a.Platform, &a.Status, &a.Lifecycle, &a.Owner,
-		&a.Environment, &a.Address, &a.CPU, &a.MemoryMiB, &a.Notes, &a.Attributes,
-		&a.Version, &a.UpdatedAt, &a.SourceKey, &a.ExternalKey, &a.LastSeenAt, &a.MissingCount, &a.Observed)
+		&a.Environment, &a.Address, &a.CPU, &a.MemoryMiB, &a.Notes, &attributes,
+		&a.Version, &a.UpdatedAt, &a.SourceKey, &a.ExternalKey, &a.LastSeenAt, &a.MissingCount, &observed)
+	a.Attributes = json.RawMessage(attributes)
+	a.Observed = json.RawMessage(observed)
 	return a, err
 }
 
@@ -119,7 +119,7 @@ func ListLinks(ctx context.Context, db *sql.DB, assetID int64) ([]Link, error) {
 func ListChanges(ctx context.Context, db *sql.DB, assetID int64) ([]Change, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, COALESCE(asset_id, 0), asset_name, actor, action,
-			COALESCE(before_data, 'null'::jsonb), COALESCE(after_data, 'null'::jsonb), created_at
+			COALESCE(before_data, 'null'), COALESCE(after_data, 'null'), created_at
 		FROM changes WHERE $1=0 OR asset_id=$1 ORDER BY id DESC LIMIT 100`, assetID)
 	if err != nil {
 		return nil, err
@@ -128,10 +128,13 @@ func ListChanges(ctx context.Context, db *sql.DB, assetID int64) ([]Change, erro
 	changes := make([]Change, 0)
 	for rows.Next() {
 		var change Change
+		var before, after string
 		if err := rows.Scan(&change.ID, &change.AssetID, &change.AssetName, &change.Actor,
-			&change.Action, &change.Before, &change.After, &change.CreatedAt); err != nil {
+			&change.Action, &before, &after, &change.CreatedAt); err != nil {
 			return nil, err
 		}
+		change.Before = json.RawMessage(before)
+		change.After = json.RawMessage(after)
 		changes = append(changes, change)
 	}
 	return changes, rows.Err()
@@ -152,7 +155,7 @@ func SaveAsset(ctx context.Context, db *sql.DB, id int64, version int, fields Fi
 		return asset, tx.Commit()
 	}
 
-	before, err := readAsset(tx.QueryRowContext(ctx, "SELECT "+assetColumns+" FROM assets WHERE id=$1 FOR UPDATE", id))
+	before, err := readAsset(tx.QueryRowContext(ctx, "SELECT "+assetColumns+" FROM assets WHERE id=$1", id))
 	if err != nil {
 		return Asset{}, err
 	}
@@ -162,23 +165,16 @@ func SaveAsset(ctx context.Context, db *sql.DB, id int64, version int, fields Fi
 	if fields.Kind != before.Kind {
 		return Asset{}, ErrConflict
 	}
-	if before.SourceKey != "" {
-		fields.Name = before.Name
-		fields.Platform = before.Platform
-		fields.Status = before.Status
-		fields.CPU = before.CPU
-		fields.MemoryMiB = before.MemoryMiB
-	}
 	if equalFields(fields, before.Fields) {
 		return before, tx.Commit()
 	}
 
 	asset, err := readAsset(tx.QueryRowContext(ctx, `
 		UPDATE assets SET name=$2, platform=$3, status=$4, lifecycle=$5, owner=$6, environment=$7,
-			address=$8, cpu=$9, memory_mib=$10, notes=$11, attributes=$12, version=version+1, updated_at=now()
+			address=$8, cpu=$9, memory_mib=$10, notes=$11, attributes=$12, version=version+1, updated_at=$13
 		WHERE id=$1 RETURNING `+assetColumns, id, fields.Name, fields.Platform, fields.Status,
 		fields.Lifecycle, fields.Owner, fields.Environment, fields.Address, fields.CPU, fields.MemoryMiB,
-		fields.Notes, fields.Attributes))
+		fields.Notes, string(fields.Attributes), nowText()))
 	if err != nil {
 		return Asset{}, err
 	}
@@ -191,10 +187,11 @@ func SaveAsset(ctx context.Context, db *sql.DB, id int64, version int, fields Fi
 func createAsset(ctx context.Context, tx *sql.Tx, fields Fields, actor string) (Asset, error) {
 	asset, err := readAsset(tx.QueryRowContext(ctx, `
 		INSERT INTO assets (kind, name, platform, status, lifecycle, owner, environment, address,
-			cpu, memory_mib, notes, attributes)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING `+assetColumns,
+			cpu, memory_mib, notes, attributes, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING `+assetColumns,
 		fields.Kind, fields.Name, fields.Platform, fields.Status, fields.Lifecycle, fields.Owner,
-		fields.Environment, fields.Address, fields.CPU, fields.MemoryMiB, fields.Notes, fields.Attributes))
+		fields.Environment, fields.Address, fields.CPU, fields.MemoryMiB, fields.Notes,
+		string(fields.Attributes), nowText()))
 	if err != nil {
 		return Asset{}, err
 	}
@@ -242,11 +239,7 @@ func ChangeLink(ctx context.Context, db *sql.DB, link Link, remove bool, actor s
 	if err != nil {
 		return err
 	}
-	query := "SELECT " + assetColumns + " FROM assets WHERE id=$1"
-	if !remove && link.Kind == "contains" {
-		query += " FOR UPDATE"
-	}
-	to, err := readAsset(tx.QueryRowContext(ctx, query, link.ToID))
+	to, err := readAsset(tx.QueryRowContext(ctx, "SELECT "+assetColumns+" FROM assets WHERE id=$1", link.ToID))
 	if err != nil {
 		return err
 	}
@@ -263,9 +256,6 @@ func ChangeLink(ctx context.Context, db *sql.DB, link Link, remove bool, actor s
 	if !ValidLink(link.Kind, from.Kind, to.Kind) {
 		return fmt.Errorf("%w: 所选资源类型与关系不匹配", ErrInvalid)
 	}
-	if (link.Kind == "hosts" || link.Kind == "member") && to.SourceKey != "" {
-		return ErrManaged
-	}
 	if link.Kind == "contains" {
 		var mounted bool
 		if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM rack_placements WHERE asset_id=$1)", to.ID).Scan(&mounted); err != nil {
@@ -279,8 +269,7 @@ func ChangeLink(ctx context.Context, db *sql.DB, link Link, remove bool, actor s
 		INSERT INTO asset_links (from_id,to_id,kind) VALUES ($1,$2,$3) RETURNING id`,
 		link.FromID, link.ToID, link.Kind).Scan(&link.ID)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if isUniqueViolation(err) {
 			return fmt.Errorf("%w: 此关系已存在，或目标已关联到另一上级资源", ErrInvalid)
 		}
 		return err
@@ -324,6 +313,6 @@ func writeNamedChange(ctx context.Context, tx *sql.Tx, assetID any, name, actor,
 	}
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO changes (asset_id, asset_name, actor, action, before_data, after_data)
-		VALUES ($1,$2,$3,$4,$5,$6)`, assetID, name, actor, action, oldData, newData)
+		VALUES ($1,$2,$3,$4,$5,$6)`, assetID, name, actor, action, string(oldData), string(newData))
 	return err
 }

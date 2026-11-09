@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const sessionCookie = "radar_session"
+const sessionCookie = "easy_session"
 const sessionDuration = 12 * time.Hour
 const passwordIterations = 600000
 const defaultAdminUsername = "admin"
@@ -45,7 +45,7 @@ func EnsureUser(ctx context.Context, db *sql.DB, username, password, role string
 	// A known bootstrap password is only used when the database has no administrator yet.
 	var exists bool
 	if err := db.QueryRowContext(ctx, `
-		SELECT EXISTS (SELECT 1 FROM users WHERE role=$2 AND (username=$1 OR $3::boolean))`,
+		SELECT EXISTS (SELECT 1 FROM users WHERE role=$2 AND (username=$1 OR $3))`,
 		username, role, usesDefaultPassword).Scan(&exists); err != nil {
 		return err
 	}
@@ -126,12 +126,12 @@ func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 	token := base64.RawURLEncoding.EncodeToString(raw)
 	expires := time.Now().Add(sessionDuration)
 	_, err = s.db.ExecContext(r.Context(), "INSERT INTO sessions (token_hash, username, expires_at) VALUES ($1,$2,$3)",
-		sessionHash(token), user.Username, expires)
+		sessionHash(token), user.Username, timeText(expires))
 	if err != nil {
 		s.databaseError(w, err)
 		return
 	}
-	_, _ = s.db.ExecContext(r.Context(), "DELETE FROM sessions WHERE expires_at <= now()")
+	_, _ = s.db.ExecContext(r.Context(), "DELETE FROM sessions WHERE expires_at <= $1", nowText())
 	http.SetCookie(w, &http.Cookie{
 		Name: sessionCookie, Value: token, Path: "/", Expires: expires, HttpOnly: true,
 		SameSite: http.SameSiteStrictMode, Secure: s.secureCookie,
@@ -163,7 +163,7 @@ func (s *Server) requireUser(write bool, next http.HandlerFunc) http.HandlerFunc
 		var user User
 		err = s.db.QueryRowContext(r.Context(), `
 			SELECT u.username, u.role FROM sessions s JOIN users u ON u.username=s.username
-			WHERE s.token_hash=$1 AND s.expires_at > now()`, sessionHash(cookie.Value)).Scan(&user.Username, &user.Role)
+			WHERE s.token_hash=$1 AND s.expires_at > $2`, sessionHash(cookie.Value), nowText()).Scan(&user.Username, &user.Role)
 		if errors.Is(err, sql.ErrNoRows) {
 			fail(w, http.StatusUnauthorized, "登录已失效，请重新登录")
 			return

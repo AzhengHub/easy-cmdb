@@ -20,11 +20,6 @@ export interface Asset extends AssetFields {
   id: number
   version: number
   updatedAt: string
-  sourceKey?: string
-  externalKey?: string
-  lastSeenAt?: string
-  missingCount: number
-  observed: Record<string, unknown>
 }
 
 export interface Link {
@@ -34,7 +29,6 @@ export interface Link {
   fromName: string
   toId: number
   toName: string
-  sourceKey?: string
 }
 
 export interface Change {
@@ -48,16 +42,6 @@ export interface Change {
   createdAt: string
 }
 
-export interface SyncRun {
-  sourceKey: string
-  platform: 'pve' | 'kvm'
-  status: 'ok' | 'failed'
-  message: string
-  resourceCount: number
-  finishedAt: string
-  lastSuccessAt: string | null
-}
-
 export interface User {
   username: string
   role: 'admin' | 'operator' | 'viewer'
@@ -69,6 +53,11 @@ export class APIError extends Error {
   }
 }
 
+async function errorMessage(res: Response): Promise<string> {
+  const data = await res.json().catch(() => null)
+  return data?.error ?? '请求失败，请稍后重试'
+}
+
 export async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const res = await fetch('/api' + path, {
     method,
@@ -76,10 +65,18 @@ export async function api<T>(path: string, method = 'GET', body?: unknown): Prom
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
-  if (!res.ok) {
-    const data = await res.json().catch(() => null)
-    throw new APIError(res.status, data?.error ?? '请求失败，请稍后重试')
-  }
+  if (!res.ok) throw new APIError(res.status, await errorMessage(res))
   if (res.status === 204) return undefined as T
+  return res.json() as Promise<T>
+}
+
+export async function apiCSV<T>(path: string, file: File): Promise<T> {
+  const res = await fetch('/api' + path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'text/csv; charset=utf-8' },
+    body: file,
+  })
+  if (!res.ok) throw new APIError(res.status, await errorMessage(res))
   return res.json() as Promise<T>
 }

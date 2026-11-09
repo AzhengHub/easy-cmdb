@@ -1,83 +1,132 @@
-# Radar CMDB
+# Easy CMDB
 
 [简体中文](README.md)
 
-Radar CMDB helps enterprises manage IT assets, infrastructure configuration, and business relationships in one place. It tracks physical hosts, chassis and compute nodes, virtualization clusters, and virtual machines. The web interface provides asset search, relationship views, CSV export, access controls, and change history, with read-only discovery for Proxmox VE and standalone KVM.
+Easy CMDB is a simple, easy-to-use configuration management database for IT assets, infrastructure configuration, and business relationships. It targets small, single-node operations: around 3,000 virtual machines with a total footprint under 5,000 hosts, maintained by a small operations team. The design goal is simple, sufficient, and easy to maintain: no extra middleware and no large-cluster ambitions. It tracks physical hosts, chassis and compute nodes, virtualization clusters, and virtual machines, with asset search, relationship views, CSV import and export, access controls, change history, and room/rack views.
 
-Radar uses Go, Vue 3 with TypeScript, and PostgreSQL. The web interface currently uses Simplified Chinese. English localization is planned once the first release's features and terminology settle.
+Easy CMDB uses Go, Vue 3 with TypeScript, and SQLite. One Go binary, the built `web/dist` assets, and one SQLite file are all it needs; there is no separate database service to deploy. The current release uses SQLite, and a MySQL or PostgreSQL backend can be added later if needed.
 
-## Quick start
+## Scope
 
-Install Docker and Docker Compose v2.24 or later. Copy the example configuration:
+- Around 3,000 virtual machines with a total footprint under 5,000 hosts on a single node.
+- A small operations team with read-heavy usage.
+- No database service to operate; a backup is a single database file.
+- Manual maintenance and spreadsheet import as the primary workflow, with asset relationships, room/rack views, and change history.
 
-```bash
-cp .env.example .env
-```
+It is not designed for multi-node concurrent writes, large multi-tenant deployments, or high-frequency concurrent editing.
 
-Run `openssl rand -hex 24` to generate a database password and set `POSTGRES_PASSWORD` in `.env`. Start the services:
+## Run locally
 
-```bash
-docker compose up --build -d
-```
-
-Open [http://127.0.0.1:8080](http://127.0.0.1:8080). The default local sign-in is `admin` with password `default`. A new installation starts with an empty inventory. Add assets in the web interface or configure a data source below.
-
-Compose binds the web interface to localhost by default. Before the first start of a network-accessible installation, set a unique `RADAR_ADMIN_PASSWORD` of at least 12 bytes. Set a password as well if you customize `RADAR_ADMIN_USER`. Set `RADAR_COOKIE_SECURE=true` when serving the application through an HTTPS reverse proxy. Use a hexadecimal database password to keep the connection URL easy to configure. Account environment variables apply when an account is first created. Existing accounts use their stored passwords.
-
-## Connect Proxmox VE and standalone KVM
-
-1. Create `collector-data/ssh` and copy [collectors.example.json](collectors.example.json) to `collector-data/sources.json`. Add one source per Proxmox VE cluster and one per standalone libvirt host. Give every source a unique, stable `key`.
-2. For Proxmox VE, grant the collection account and API token read access to the resources to inventory. With token privilege separation enabled, assign the required permissions to both the user and the token. Set the variable named by `tokenEnv` in `collector-data/credentials.env`, for example `RADAR_PVE_TOKEN='radar@pve!inventory=<token secret>'`. Provide the cluster CA at the path specified by `caFile` and use a node hostname that matches its certificate. The collector reads the cluster resource inventory. Enable `vmDetails` to also read virtual NICs, disk references, and available VM identifiers.
-3. For KVM, the collector connects to libvirt over SSH with `virsh --readonly`. Put the dedicated private key and a verified `known_hosts` file in `collector-data/ssh/`. Add an SSH `config` if needed. The container runs as UID 10001, so make the files readable by that user and restrict private-key access to the file owner. A collector running directly on the host can also use `qemu:///system`.
-4. Start the collector and open the collection status page (`采集状态`) to see the results.
+Use Go 1.26 or later. The first run also needs Node.js 22 LTS or another version supported by Vite 7 to build the frontend.
 
 ```bash
-docker compose --profile collect up -d
-docker compose --profile collect logs collector
+npm --prefix web ci
+npm --prefix web run build
+go build -trimpath -o bin/easy ./cmd/easy
 ```
 
-To run one collection cycle, use `docker compose --profile collect run --rm collector collect --once`. Each source runs one cycle at a time.
+The SQLite database defaults to `easy.db` in the working directory. The first start creates the database file and schema automatically; there is no manual setup step. Start the web service:
 
-The collector updates resource names, CPU, memory, status, and virtualization relationships. Operators maintain ownership, business associations, environment, management addresses, and custom attributes. Two consecutive successful syncs that fail to find a resource mark it for review. An operator confirms retirement. A failed sync preserves the last successful inventory. VM migrations within a Proxmox VE cluster retain the asset ID, and change history records when the collector observed the move. When setting up a new installation with existing infrastructure, run collection first, then attach chassis relationships and business ownership to the discovered assets.
+```bash
+./bin/easy serve
+```
 
-The current collector covers Proxmox VE QEMU virtual machines and libvirt domains. Guest IPs and hardware serial numbers can be entered manually. Planned work includes iDRAC/Redfish, guest-agent IP discovery, CSV import, and reconciling KVM migrations across data sources.
+On Windows PowerShell:
+
+```powershell
+npm --prefix web ci
+npm --prefix web run build
+go build -trimpath -o bin/easy.exe ./cmd/easy
+.\bin\easy.exe serve
+```
+
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080). The default initial sign-in is `admin` with password `default`; change it in the configuration below. A new installation starts with an empty inventory. Add assets in the web interface or use CSV import as described below.
+
+The service binds to `127.0.0.1:8080` by default. Before the first start of a network-accessible installation, copy `config.example.yaml` to `config.yaml` and set `admin.password` to a unique password of at least 12 bytes. Set `cookie_secure: true` when serving the application through an HTTPS reverse proxy. The SQLite database file contains password hashes and asset data, so restrict access to the database file, backups, and asset exports. Accounts are created from the configuration on first start; existing accounts use their stored passwords.
+
+## Configuration
+
+Every setting has a default, so the program runs without a configuration file. To customize it, copy the example:
+
+```bash
+cp config.example.yaml config.yaml
+```
+
+`config.yaml` is ignored by Git so it can hold local passwords. Available fields:
+
+```yaml
+listen: 127.0.0.1:8080
+database: easy.db
+web_dir: web/dist
+cookie_secure: false
+
+admin:
+  username: admin
+  password: ""
+
+operator:
+  username: ""
+  password: ""
+
+viewer:
+  username: ""
+  password: ""
+```
+
+- Leaving `admin.password` empty uses the default password `default`; change it to at least 12 bytes before exposing the service.
+- Leaving both `operator` / `viewer` fields empty disables that account.
+- Accounts are created only on first start; changing `config.yaml` later does not change an existing account's password.
+
+## Asset management
+
+Add individual assets with the `新增资产` button. For larger inventories, use CSV import: edit the file in Excel and save it as `CSV UTF-8` (comma-separated), click `下载模板` on the asset list to get the template, fill it in, then click `导入 CSV`.
+
+Template columns:
+
+```text
+资源名称,类型,平台,状态,生命周期,地址 / IP,CPU,内存 MiB,负责人,环境,备注,扩展属性
+```
+
+- Type: `chassis`, `host`, `cluster`, `vm`, `business`, `switch`, or the Chinese labels 机箱, 物理机, 集群, 虚拟机, 业务, 交换机.
+- Platform: `pve`, `kvm`, `Proxmox VE`, `KVM`, or empty.
+- Status: `unknown`, `online`, `offline`, `running`, `stopped`, `paused`, or the Chinese labels 未知, 在线, 离线, 运行中, 已停止, 已暂停.
+- Lifecycle: `active`, `retired`, 在册, 已退役; empty defaults to active.
+- Attributes: a JSON object such as `{"业务":"示例"}`; empty becomes `{}`.
+- CPU and memory MiB must be non-negative integers.
+
+Import rules:
+
+- Up to 5,000 rows and 16 MiB per import;
+- Validation and insert run in one batch; if any row fails, nothing is written;
+- Import only creates new assets; it never overwrites an existing asset;
+- Asset names must not duplicate an existing asset or another row in the same file;
+- Successful imports appear in change history under the current account.
+
+Exported CSV files use the same columns and can be used as a reference when preparing an import.
 
 ## Room layouts
 
 Open the room view (`机房视图`), create a named room with a grid size, and add racks with a label, height, grid position, and orientation. Drag racks to vacant cells in the floor plan or edit their coordinates directly. The 3D overview supports rotation, zoom, rack selection, and opening device details.
 
-Use the rack elevation to mount an existing asset or create and mount a physical host, switch, or chassis in one step. Set the starting rack unit and device height. Radar validates overlaps and rack boundaries. Asset details link back to the room and rack, and chassis nodes and virtual machines follow their physical equipment relationships. Unmounting a device keeps its asset record.
+Use the rack elevation to mount an existing asset or create and mount a physical host, switch, or chassis in one step. Set the starting rack unit and device height. Easy CMDB validates overlaps and rack boundaries. Asset details link back to the room and rack, and chassis nodes and virtual machines follow their physical equipment relationships. Unmounting a device keeps its asset record.
 
 Racks occupy grid cells in the room layout. The floor plan, rack elevation, and 3D overview share the same placement data. Room, rack, and placement changes appear in change history.
 
 ## Back up and restore
 
-Run a logical backup daily and copy the resulting dump to separate storage.
+Stop the web service before copying the SQLite file. The database uses WAL mode, and the last connection checkpoints the WAL into the main file on a clean exit. If `easy.db-wal` or `easy.db-shm` is still present, the process did not stop cleanly; start it again and stop it normally before taking the backup.
 
 ```bash
-docker compose exec -T db pg_dump -U radar -d radar -Fc > radar-cmdb.dump
+cp easy.db easy-cmdb.db
 ```
 
-Verify the backup in a separate empty database before using it for recovery. These commands create a verification database alongside the original:
-
-```bash
-docker compose exec -T db createdb -U radar radar_restore
-docker compose exec -T db pg_restore -U radar --exit-on-error -d radar_restore < radar-cmdb.dump
-```
+Verify a backup before relying on it. To restore, stop the service, replace the database file, remove any leftover `easy.db-wal` and `easy.db-shm`, and start the service again.
 
 ## Development
 
-Use Go 1.26 or later, Node.js 22 LTS or another version supported by Vite 7, and a separate PostgreSQL 17 development database.
+After the first frontend build, `npm --prefix web run dev` starts the frontend development server and proxies `/api` to the Go service on port 8080. Run the Go service with `go run ./cmd/easy`. Run `go test ./...` for Go package checks and `npm --prefix web run check` for Vue type checking.
 
-```bash
-npm --prefix web ci
-npm --prefix web run build
-export RADAR_DATABASE_URL='postgres://radar:<password>@127.0.0.1:5432/radar?sslmode=disable'
-export RADAR_ADMIN_PASSWORD='<at-least-12-bytes>'
-go run ./cmd/radar
-```
-
-Run `go test ./...` for Go package checks and `npm --prefix web run check` for Vue type checking. With the Go server running on port 8080, `npm --prefix web run dev` starts the frontend development server and proxies `/api` to Go. The API and collector share the same binary and run separately as `radar serve` and `radar collect`.
+The schema lives in `internal/cmdb/schema.sql` and is applied when an empty database starts for the first time. This project is still in development: after changing the schema, delete the local `easy.db` and restart to recreate it; there are no migration files.
 
 ## License
 

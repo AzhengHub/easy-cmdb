@@ -38,12 +38,12 @@ func NewServer(db *sql.DB, secureCookie bool, frontend http.Handler) http.Handle
 	}))
 	mux.HandleFunc("GET /api/assets", s.requireUser(false, s.listAssets))
 	mux.HandleFunc("POST /api/assets", s.requireUser(true, s.saveAsset))
+	mux.HandleFunc("POST /api/assets/import", s.requireUser(true, s.importAssets))
 	mux.HandleFunc("PUT /api/assets/{id}", s.requireUser(true, s.saveAsset))
 	mux.HandleFunc("GET /api/links", s.requireUser(false, s.listLinks))
 	mux.HandleFunc("POST /api/links", s.requireUser(true, s.saveLink))
 	mux.HandleFunc("DELETE /api/links/{id}", s.requireUser(true, s.deleteLink))
 	mux.HandleFunc("GET /api/changes", s.requireUser(false, s.listChanges))
-	mux.HandleFunc("GET /api/sync-runs", s.requireUser(false, s.listSyncRuns))
 	s.registerFacilities(mux)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusNotFound, "接口不存在")
@@ -215,15 +215,6 @@ func (s *Server) listChanges(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, changes)
 }
 
-func (s *Server) listSyncRuns(w http.ResponseWriter, r *http.Request) {
-	runs, err := ListSyncRuns(r.Context(), s.db)
-	if err != nil {
-		s.databaseError(w, err)
-		return
-	}
-	respond(w, http.StatusOK, runs)
-}
-
 func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id < 1 {
@@ -264,7 +255,7 @@ func (s *Server) databaseError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		fail(w, http.StatusNotFound, "记录不存在")
-	case errors.Is(err, ErrConflict), errors.Is(err, ErrManaged):
+	case errors.Is(err, ErrConflict):
 		fail(w, http.StatusConflict, err.Error())
 	case errors.Is(err, ErrInvalid):
 		fail(w, http.StatusBadRequest, strings.TrimPrefix(err.Error(), ErrInvalid.Error()+": "))

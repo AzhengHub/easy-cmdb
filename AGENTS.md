@@ -1,27 +1,27 @@
-# Radar CMDB 仓库约定
+# Easy CMDB 仓库约定
 
 ## 企业数据保密（适用于所有改动）
 
 - 严禁将真实企业数据写入仓库文件或提交记录。包括主机名、内外网 IP、MAC 地址、设备序列号、资产清单、业务拓扑、账号密码、数据库连接串、API Token 和私钥。
 - 源码、文档、配置示例和测试使用虚构数据或占位符。提交前检查暂存内容。对外分享日志、截图、Issue 或 PR 前，替换其中的敏感值并复核。
-- 真实数据留在受控的存储中。确需在本机配置的凭据和采集参数放在 Git 忽略的 `.env` 或 `collector-data/` 中，数据库备份和资产导出同样留在受控环境。
+- 真实数据留在受控的存储中。确需在本机配置的凭据放在 Git 忽略的 `config.yaml` 中；数据库备份和资产导出同样留在受控环境。
 
 ## 项目概览
 
-Radar CMDB 用于集中管理企业 IT 资产、配置和业务关系。技术栈为 Go 1.26+、Vue 3 + TypeScript 和 PostgreSQL 17。开发和部署步骤见 [README.md](README.md)。
+Easy CMDB 用于集中管理企业 IT 资产、配置和业务关系，面向约 3000 台虚拟机、5000 台主机以内的单机场景。技术栈为 Go 1.26+、Vue 3 + TypeScript 和 SQLite。开发和部署步骤见 [README.md](README.md)。
 
 ## 代码位置与改动范围
 
-- `cmd/radar/` 提供 `radar serve` 和 `radar collect` 两个入口。`internal/cmdb/` 维护资产、权限、审计和数据库，`internal/collect/` 负责数据源适配与采集调度。
+- `cmd/easy/` 提供 `easy serve` 入口。`internal/config/` 读取 YAML 配置，`internal/cmdb/` 维护资产、权限、审计、CSV 导入和数据库。自动采集功能已移除，现阶段以手工维护和 CSV 导入为主。
 - `web/src/` 是管理界面，`web/src/api.ts` 定义前端使用的接口类型。修改请求、响应或状态值时，检查 Go 接口和 Vue 调用方是否一致。
 - 优先复用现有模块，按当前任务做可独立验证的改动。部署或配置方式有变化时，同步中英文 README 和对应的示例配置。
 
-## 数据库与采集
+## 数据库与资产维护
 
-- `internal/cmdb/migrations/` 的编号 SQL 随源码提交，应用启动时按顺序执行。对需要保留数据的数据库，保留已执行迁移的内容和文件名，后续改表使用新的编号文件。
+- `internal/cmdb/schema.sql` 是唯一的建表脚本，首次打开空数据库时执行一次。项目仍在开发阶段，改表直接修改该文件；本地删除 `easy.db` 后重启即可重建，不维护迁移文件。
+- SQLite 数据库默认是工作目录下的 `easy.db`，可在 `config.yaml` 的 `database` 指定。连接启用 WAL、外键约束和忙等待，应用内使用单写连接；备份前先停止服务，避免遗漏 WAL 中尚未合并的事务。
 - 新库从空台账开始。手工演示数据保存在 Git 忽略的 `demo-data/` 中，按需导入隔离的开发库。
-- Proxmox VE 通过 HTTPS API 只读采集，独立 KVM 通过 libvirt 和 `virsh --readonly` 采集。连接时校验 TLS 证书与 SSH 主机密钥。
-- 采集以数据源和外部标识匹配资产。Proxmox VE 集群内迁移更新宿主机关系并保留资产 ID。采集失败时保留上次成功结果，负责人、业务归属、备注等人工资料由用户维护。
+- 资产以手工维护和 CSV 导入为主。导入一次最多 5000 行、16 MiB，整批事务写入；任一行校验失败、名称重复或与已有资产重名时都不写入任何数据。导入只新增，不覆盖已有资产。
 
 ## 界面与语言
 
@@ -31,12 +31,12 @@ Radar CMDB 用于集中管理企业 IT 资产、配置和业务关系。技术�
 
 ## 本地配置与验证
 
-- 构建产物留在本地。`.env.example` 和 `collectors.example.json` 使用占位值。
+- 构建产物和本地数据库留在本地，不提交。`config.example.yaml` 使用占位值，`config.yaml` 被 Git 忽略；程序不读取环境变量配置。
 - Go 改动先运行 `gofmt`，再运行 `go test ./...`。前端依赖使用 `npm --prefix web ci` 安装，前端改动运行 `npm --prefix web run check`，涉及打包时运行 `npm --prefix web run build`。
-- 涉及数据库或部署时，用独立的 PostgreSQL 库或单独的 Compose 项目验证。迁移变更同时检查空库安装和旧库升级，确认已有资产可读。采集验证优先用模拟接口或测试环境。
+- 涉及数据库或部署时，用独立的 SQLite 数据库文件验证。修改 `schema.sql` 后检查空库重建，确认已有资产可读；开发阶段不维护旧库升级。CSV 导入验证使用临时的虚构 CSV，覆盖成功、重复名称和错误行。
 
 ## 开发环境交付
 
-- 每次代码改动完成并通过相关检查后，交付前在本仓库已配置的开发环境重新构建和启动 Web 服务。使用 `docker compose -p radar-cmdb up --build -d --no-deps web`，或在安装了独立命令的宿主机上使用 `docker-compose`。
-- 更新沿用开发环境已有的配置和 PostgreSQL 数据卷。采集代码有改动且开发环境已启用采集时，用同一镜像更新采集服务。
-- 构建并启动后，使用本机 `.env` 配置的访问地址检查 `/healthz`，验证本次改动的入口或主要流程，并在交付时说明开发环境验证结果。
+- 每次代码改动完成并通过相关检查后，交付前在本仓库重新构建并启动 Web 服务：运行 `go build -trimpath -o bin/easy ./cmd/easy`（Windows 为 `bin/easy.exe`），再以本机 `config.yaml`（如果存在）启动 `bin/easy serve`。
+- 更新沿用开发环境已有的 SQLite 数据库文件。
+- 构建并启动后，使用本机配置的访问地址检查 `/healthz`，验证本次改动的入口或主要流程，并在交付时说明开发环境验证结果。

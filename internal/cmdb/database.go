@@ -3,12 +3,46 @@ package cmdb
 import (
 	"context"
 	"database/sql"
-	"embed"
+	_ "embed"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+
+	"modernc.org/sqlite"
 )
 
-//go:embed migrations/*.sql
-var schema embed.FS
+//go:embed schema.sql
+var schemaSQL string
+
+// sqliteOptions keeps a single writer at a time, uses WAL for concurrent
+// readers, and makes every transaction an immediate write transaction so the
+// cross-row checks in the API cannot interleave with another writer.
+const sqliteOptions = "?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)" +
+	"&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_txlock=immediate"
+
+// Open opens the SQLite database file used by the application. A relative path
+// is resolved against the working directory. The parent directory is created
+// when it does not exist.
+func Open(path string) (*sql.DB, error) {
+	if path == "" {
+		path = "easy.db"
+	}
+	if dir := filepath.Dir(path); dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			return nil, fmt.Errorf("创建数据库目录: %w", err)
+		}
+	}
+	db, err := sql.Open("sqlite", path+sqliteOptions)
+	if err != nil {
+		return nil, err
+	}
+	// SQLite permits one writer. Serializing the pool also keeps reads and
+	// writes in one process deterministic without SQLITE_BUSY failures.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	return db, nil
+}
 
 func Initialize(ctx context.Context, db *sql.DB) error {
 	tx, err := db.BeginTx(ctx, nil)
@@ -17,39 +51,32 @@ func Initialize(ctx context.Context, db *sql.DB) error {
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(5843201)"); err != nil {
+	var initialized bool
+	if err := tx.QueryRowContext(ctx,
+		"SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='assets')").Scan(&initialized); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS migrations (name text PRIMARY KEY)`); err != nil {
-		return err
+	if initialized {
+		return tx.Commit()
 	}
-	entries, err := schema.ReadDir("migrations")
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if err := applySQL(ctx, tx, "migrations/"+entry.Name()); err != nil {
-			return err
-		}
+	if _, err := tx.ExecContext(ctx, schemaSQL); err != nil {
+		return fmt.Errorf("初始化表结构: %w", err)
 	}
 	return tx.Commit()
 }
 
-func applySQL(ctx context.Context, tx *sql.Tx, path string) error {
-	var applied bool
-	if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM migrations WHERE name=$1)", path).Scan(&applied); err != nil {
-		return err
+// isUniqueViolation reports whether err is an SQLite uniqueness error.
+func isUniqueViolation(err error) bool {
+	var sqliteErr *sqlite.Error
+	if !errors.As(err, &sqliteErr) {
+		return false
 	}
-	if applied {
-		return nil
-	}
-	body, err := schema.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, string(body)); err != nil {
-		return fmt.Errorf("apply %s: %w", path, err)
-	}
-	_, err = tx.ExecContext(ctx, "INSERT INTO migrations (name) VALUES ($1)", path)
-	return err
+	// SQLITE_CONSTRAINT_PRIMARYKEY and SQLITE_CONSTRAINT_UNIQUE.
+	return sqliteErr.Code() == 1555 || sqliteErr.Code() == 2067
+}
+
+// isForeignKeyViolation reports whether err is an SQLite foreign key error.
+func isForeignKeyViolation(err error) bool {
+	var sqliteErr *sqlite.Error
+	return errors.As(err, &sqliteErr) && sqliteErr.Code() == 787
 }

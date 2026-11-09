@@ -87,6 +87,7 @@ nav { display: grid; gap: 4px; }
 .panel { overflow: hidden; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 17px 19px 13px; }
 .panel-heading p { font-size: 12px; margin-top: 4px; }
+.heading-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 7px; }
 .filters { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 19px 14px; }
 input, select, textarea { border: 1px solid #d9e3ef; background: white; color: #17253a; border-radius: 7px; padding: 8px 10px; min-height: 35px; font-size: 13px; min-width: 0; }
 input:disabled, select:disabled, textarea:disabled { background: #f1f4f9; color: #596d87; }
@@ -206,6 +207,8 @@ td .mono, td.mono { font-size: 12px; white-space: nowrap; }
   .metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .page-heading { align-items: flex-start; margin-bottom: 14px; }
   .panel-heading, .filters { padding-inline: 10px; }
+  .panel-heading { flex-wrap: wrap; }
+  .heading-actions { width: 100%; justify-content: flex-start; }
   .filters .search { width: 100%; }
   .drawer-body, .drawer-title, .drawer-footer { padding-inline: 13px; }
 }
