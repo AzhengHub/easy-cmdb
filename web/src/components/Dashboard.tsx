@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Card, Col, Empty, List, Progress, Row, Statistic, Tag } from 'antd'
+import { Card, Col, Empty, Progress, Row, Statistic } from 'antd'
 import {
   ApartmentOutlined, CloudServerOutlined, DesktopOutlined, GlobalOutlined,
   HddOutlined, SwapOutlined,
@@ -213,27 +213,6 @@ export function Dashboard({ assets, subnets, facilities, changes, dark, onGo, on
         <Col xs={24} lg={10}>
           <Card title="最近变更" size="small">
             {changes.length ? <ChangeList changes={changes.slice(0, 6)} onOpen={onOpenAsset} /> : <Empty description="暂无变更记录" />}
-          </Card>
-        </Col>
-      </Row>
-
-      <Row gutter={[16, 16]} className="dashboard-section">
-        <Col xs={24}>
-          <Card title="快速入口" size="small">
-            <List
-              dataSource={[
-                { title: '维护物理机', desc: '查看服务器、宿主机和硬件信息', page: 'host' as Page, tag: '物理机' },
-                { title: '维护虚拟机', desc: '查看虚拟机状态和宿主机关系', page: 'vm' as Page, tag: '虚拟机' },
-                { title: '管理网段', desc: '查看网段使用率、已用和空闲 IP', page: 'ipam' as Page, tag: 'IPAM' },
-                { title: '查看数据中心', desc: '机柜、U 位和三维布局', page: 'facilities' as Page, tag: '数据中心' },
-              ]}
-              renderItem={item => (
-                <List.Item onClick={() => onGo(item.page)} style={{ cursor: 'pointer' }}>
-                  <List.Item.Meta title={item.title} description={item.desc} />
-                  <Tag color="blue">{item.tag}</Tag>
-                </List.Item>
-              )}
-            />
           </Card>
         </Col>
       </Row>
