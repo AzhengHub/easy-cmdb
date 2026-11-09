@@ -6,6 +6,8 @@ Easy CMDB 是一款简单易用的配置管理数据库，用于集中管理 IT 
 
 项目采用 Go、React 19 + TypeScript、Ant Design 6、ECharts 和 SQLite。一个 Go 二进制、一份 `web/dist` 前端产物和一个 SQLite 文件即可运行，不需要单独部署数据库服务。当前版本使用 SQLite；后续如有需要，可以再扩展 MySQL 或 PostgreSQL 后端。
 
+界面支持浅色和暗色主题：首次访问跟随系统设置，登录页和顶部栏可手动切换，选择会保存在浏览器本地。
+
 ## 适用场景
 
 - 约 3000 台虚拟机，整体规模控制在 5000 台主机以内的单机环境；

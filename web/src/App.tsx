@@ -3,14 +3,14 @@ import type { ReactNode } from 'react'
 import {
   Alert, App as AntApp, Button, Card, ConfigProvider, Descriptions,
   Divider, Drawer, Dropdown, Empty, Form, Input, Layout, List, Menu, Select,
-  Space, Spin, Table, Tag, Tooltip, Upload,
+  Space, Spin, Table, Tag, Tooltip, Upload, theme,
 } from 'antd'
 import type { TableColumnsType } from 'antd'
 import {
   ApartmentOutlined, ApiOutlined, CloudServerOutlined, DatabaseOutlined,
   DesktopOutlined, DownloadOutlined, EditOutlined, GlobalOutlined, HistoryOutlined,
-  HomeOutlined, LogoutOutlined, MenuOutlined, PlusOutlined, ReloadOutlined,
-  SearchOutlined, UploadOutlined, UserOutlined,
+  HomeOutlined, LogoutOutlined, MenuOutlined, MoonOutlined, PlusOutlined, ReloadOutlined,
+  SearchOutlined, SunOutlined, UploadOutlined, UserOutlined,
 } from '@ant-design/icons'
 import { api, apiCSV, APIError } from './api'
 import type { Asset, AssetFields, Change, Kind, Link, LinkKind, Subnet, User } from './api'
@@ -64,17 +64,64 @@ function messageText(error: unknown) {
   return error instanceof Error ? error.message : '操作失败'
 }
 
-export default function App() {
+function initialDark() {
+  try {
+    const saved = localStorage.getItem('easy-cmdb-theme')
+    if (saved === 'dark') return true
+    if (saved === 'light') return false
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  } catch {
+    return false
+  }
+}
+
+function ThemeToggle({ dark, onToggleTheme, className }: { dark: boolean; onToggleTheme: () => void; className?: string }) {
   return (
-    <ConfigProvider theme={{ token: { colorPrimary: '#1677ff', borderRadius: 6 } }}>
+    <Tooltip title={dark ? '切换到浅色模式' : '切换到暗色模式'}>
+      <Button
+        type="text" className={className} onClick={onToggleTheme}
+        aria-label={dark ? '切换到浅色模式' : '切换到暗色模式'}
+      >
+        {dark ? <SunOutlined /> : <MoonOutlined />}
+      </Button>
+    </Tooltip>
+  )
+}
+
+export default function App() {
+  const [dark, setDark] = useState(initialDark)
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    try {
+      localStorage.setItem('easy-cmdb-theme', dark ? 'dark' : 'light')
+    } catch {
+      // Storage may be unavailable in private browsing.
+    }
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#141414' : '#f5f5f5')
+  }, [dark])
+
+  return (
+    <ConfigProvider
+      theme={{
+        algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
+        token: {
+          colorPrimary: '#1677ff',
+          borderRadius: 6,
+          colorBgContainer: dark ? '#1f1f1f' : '#ffffff',
+          colorBgLayout: dark ? '#141414' : '#f5f5f5',
+          colorBgElevated: dark ? '#262626' : '#ffffff',
+        },
+      }}
+    >
       <AntApp>
-        <Shell />
+        <Shell dark={dark} onToggleTheme={() => setDark(value => !value)} />
       </AntApp>
     </ConfigProvider>
   )
 }
 
-function Shell() {
+function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => void }) {
   const { message } = AntApp.useApp()
   const [user, setUser] = useState<User | null>(null)
   const [checking, setChecking] = useState(true)
@@ -447,6 +494,7 @@ function Shell() {
   if (!user) {
     return (
       <div className="login-page">
+        <ThemeToggle dark={dark} onToggleTheme={onToggleTheme} className="login-theme-toggle" />
         <Card className="login-card" variant="borderless">
           <div className="login-brand"><DatabaseOutlined /> Easy CMDB</div>
           {error && <Alert type="error" showIcon message={error} className="login-alert" />}
@@ -493,6 +541,7 @@ function Shell() {
             <Button type="text" onClick={() => setCollapsed(value => !value)}><MenuOutlined /></Button>
           </Space>
           <Space size={4}>
+            <ThemeToggle dark={dark} onToggleTheme={onToggleTheme} />
             <Tooltip title="刷新">
               <Button type="text" loading={busy} onClick={() => void loadAll()}><ReloadOutlined /></Button>
             </Tooltip>
@@ -523,7 +572,7 @@ function Shell() {
           {page === 'home' && (
             <Dashboard
               assets={assets} subnets={subnets} facilities={facilities} changes={changes}
-              onGo={goTo} onOpenAsset={id => void openAsset(id)}
+              onGo={goTo} onOpenAsset={id => void openAsset(id)} dark={dark}
             />
           )}
 
@@ -534,7 +583,7 @@ function Shell() {
           {page === 'facilities' && (
             <FacilityView
               layout={facilities} assets={assets} links={links} editable={editable}
-              focus={facilityFocus} reload={loadAll}
+              focus={facilityFocus} reload={loadAll} dark={dark}
               onOpenAsset={id => void openAsset(id)}
               onSessionError={e => handleError(e)}
             />

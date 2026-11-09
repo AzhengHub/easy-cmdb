@@ -16,13 +16,14 @@ interface Props {
   subnets: Subnet[]
   facilities: Facilities
   changes: Change[]
+  dark: boolean
   onGo: (page: Page) => void
   onOpenAsset: (id: number) => void
 }
 
 const colors = ['#1677ff', '#13c2c2', '#faad14', '#722ed1', '#52c41a']
 
-export function Dashboard({ assets, subnets, facilities, changes, onGo, onOpenAsset }: Props) {
+export function Dashboard({ assets, subnets, facilities, changes, dark, onGo, onOpenAsset }: Props) {
   const stats = useMemo(() => {
     const active = assets.filter(asset => asset.lifecycle === 'active')
     const hosts = active.filter(asset => asset.kind === 'host')
@@ -41,15 +42,23 @@ export function Dashboard({ assets, subnets, facilities, changes, onGo, onOpenAs
   }, [assets, subnets])
 
   const typeOption = useMemo<EChartsOption>(() => ({
-    tooltip: { trigger: 'item' },
-    legend: { bottom: 0, left: 'center' },
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: dark ? '#1f1f1f' : '#ffffff',
+      borderColor: dark ? '#303030' : '#f0f0f0',
+      textStyle: { color: dark ? '#f0f0f0' : '#1f1f1f' },
+    },
+    legend: {
+      bottom: 0, left: 'center',
+      textStyle: { color: dark ? '#d9d9d9' : '#595959' },
+    },
     color: colors,
     series: [{
       type: 'pie',
       radius: ['45%', '70%'],
       center: ['50%', '44%'],
       avoidLabelOverlap: true,
-      itemStyle: { borderColor: '#fff', borderWidth: 2 },
+      itemStyle: { borderColor: dark ? '#1f1f1f' : '#fff', borderWidth: 2 },
       label: { show: false },
       data: [
         { value: stats.hosts.length, name: '物理机' },
@@ -57,7 +66,7 @@ export function Dashboard({ assets, subnets, facilities, changes, onGo, onOpenAs
         { value: stats.switches.length, name: '交换机' },
       ],
     }],
-  }), [stats])
+  }), [dark, stats])
 
   const vmStatusOption = useMemo<EChartsOption>(() => {
     const labels: Record<string, string> = {
@@ -66,29 +75,49 @@ export function Dashboard({ assets, subnets, facilities, changes, onGo, onOpenAs
     const counts = new Map<string, number>()
     for (const vm of stats.vms) counts.set(vm.status, (counts.get(vm.status) ?? 0) + 1)
     return {
-      tooltip: { trigger: 'item' },
-      legend: { bottom: 0, left: 'center' },
+      tooltip: {
+        trigger: 'item',
+        backgroundColor: dark ? '#1f1f1f' : '#ffffff',
+        borderColor: dark ? '#303030' : '#f0f0f0',
+        textStyle: { color: dark ? '#f0f0f0' : '#1f1f1f' },
+      },
+      legend: {
+        bottom: 0, left: 'center',
+        textStyle: { color: dark ? '#d9d9d9' : '#595959' },
+      },
       color: ['#52c41a', '#bfbfbf', '#faad14', '#ff4d4f', '#1677ff'],
       series: [{
         type: 'pie',
         radius: ['45%', '70%'],
         center: ['50%', '44%'],
-        itemStyle: { borderColor: '#fff', borderWidth: 2 },
+        itemStyle: { borderColor: dark ? '#1f1f1f' : '#fff', borderWidth: 2 },
         label: { show: false },
         data: Array.from(counts, ([key, value]) => ({ value, name: labels[key] ?? key })),
       }],
     }
-  }, [stats.vms])
+  }, [dark, stats.vms])
 
   const platformOption = useMemo<EChartsOption>(() => {
     const labels: Record<string, string> = { pve: 'Proxmox VE', kvm: 'KVM / libvirt', '': '未指定' }
     const counts = new Map<string, number>()
     for (const asset of [...stats.hosts, ...stats.vms]) counts.set(asset.platform, (counts.get(asset.platform) ?? 0) + 1)
     return {
-      tooltip: { trigger: 'axis' },
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: dark ? '#1f1f1f' : '#ffffff',
+        borderColor: dark ? '#303030' : '#f0f0f0',
+        textStyle: { color: dark ? '#f0f0f0' : '#1f1f1f' },
+      },
       grid: { left: 8, right: 12, bottom: 8, top: 20, containLabel: true },
-      xAxis: { type: 'category', data: Array.from(counts.keys(), key => labels[key] ?? key), axisTick: { show: false } },
-      yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#f0f0f0' } } },
+      xAxis: {
+        type: 'category', data: Array.from(counts.keys(), key => labels[key] ?? key), axisTick: { show: false },
+        axisLabel: { color: dark ? '#d9d9d9' : '#595959' },
+      },
+      yAxis: {
+        type: 'value', minInterval: 1,
+        axisLabel: { color: dark ? '#d9d9d9' : '#595959' },
+        splitLine: { lineStyle: { color: dark ? '#303030' : '#f0f0f0' } },
+      },
       series: [{
         type: 'bar',
         barMaxWidth: 42,
@@ -96,24 +125,35 @@ export function Dashboard({ assets, subnets, facilities, changes, onGo, onOpenAs
         data: Array.from(counts.values()),
       }],
     }
-  }, [stats.hosts, stats.vms])
+  }, [dark, stats.hosts, stats.vms])
 
   const subnetOption = useMemo<EChartsOption>(() => {
     const top = [...subnets].sort((a, b) => b.used / Math.max(1, b.usable) - a.used / Math.max(1, a.usable)).slice(0, 6).reverse()
     return {
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      tooltip: {
+        trigger: 'axis', axisPointer: { type: 'shadow' },
+        backgroundColor: dark ? '#1f1f1f' : '#ffffff',
+        borderColor: dark ? '#303030' : '#f0f0f0',
+        textStyle: { color: dark ? '#f0f0f0' : '#1f1f1f' },
+      },
       grid: { left: 8, right: 24, bottom: 8, top: 10, containLabel: true },
-      xAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%' }, splitLine: { lineStyle: { color: '#f0f0f0' } } },
-      yAxis: { type: 'category', data: top.map(item => `${item.name} ${item.cidr}`) },
+      xAxis: {
+        type: 'value', max: 100, axisLabel: { formatter: '{value}%', color: dark ? '#d9d9d9' : '#595959' },
+        splitLine: { lineStyle: { color: dark ? '#303030' : '#f0f0f0' } },
+      },
+      yAxis: {
+        type: 'category', data: top.map(item => `${item.name} ${item.cidr}`),
+        axisLabel: { color: dark ? '#d9d9d9' : '#595959' },
+      },
       series: [{
         type: 'bar',
         barMaxWidth: 20,
         itemStyle: { color: '#13c2c2', borderRadius: [0, 4, 4, 0] },
-        label: { show: true, position: 'right', formatter: '{c}%' },
+        label: { show: true, position: 'right', formatter: '{c}%', color: dark ? '#d9d9d9' : '#1f1f1f' },
         data: top.map(item => Math.round(item.used / Math.max(1, item.usable) * 100)),
       }],
     }
-  }, [subnets])
+  }, [dark, subnets])
 
   const ipPercent = stats.usable ? Math.round(stats.used / stats.usable * 100) : 0
 
@@ -145,17 +185,17 @@ export function Dashboard({ assets, subnets, facilities, changes, onGo, onOpenAs
       <Row gutter={[16, 16]} className="dashboard-grid">
         <Col xs={24} lg={8}>
           <Card title="资源类型" size="small">
-            {stats.active.length ? <Chart option={typeOption} /> : <div className="dashboard-chart-empty"><Empty description="暂无资产" /></div>}
+            {stats.active.length ? <Chart option={typeOption} dark={dark} /> : <div className="dashboard-chart-empty"><Empty description="暂无资产" /></div>}
           </Card>
         </Col>
         <Col xs={24} lg={8}>
           <Card title="虚拟机状态" size="small">
-            {stats.vms.length ? <Chart option={vmStatusOption} /> : <div className="dashboard-chart-empty"><Empty description="暂无虚拟机" /></div>}
+            {stats.vms.length ? <Chart option={vmStatusOption} dark={dark} /> : <div className="dashboard-chart-empty"><Empty description="暂无虚拟机" /></div>}
           </Card>
         </Col>
         <Col xs={24} lg={8}>
           <Card title="平台分布" size="small">
-            {stats.hosts.length + stats.vms.length ? <Chart option={platformOption} /> : <div className="dashboard-chart-empty"><Empty description="暂无物理机或虚拟机" /></div>}
+            {stats.hosts.length + stats.vms.length ? <Chart option={platformOption} dark={dark} /> : <div className="dashboard-chart-empty"><Empty description="暂无物理机或虚拟机" /></div>}
           </Card>
         </Col>
       </Row>
@@ -163,7 +203,7 @@ export function Dashboard({ assets, subnets, facilities, changes, onGo, onOpenAs
       <Row gutter={[16, 16]} className="dashboard-section">
         <Col xs={24} lg={14}>
           <Card title="网段使用率" size="small">
-            {subnets.length ? <Chart option={subnetOption} height={280} /> : <div className="dashboard-chart-empty"><Empty description="暂无网段" /></div>}
+            {subnets.length ? <Chart option={subnetOption} height={280} dark={dark} /> : <div className="dashboard-chart-empty"><Empty description="暂无网段" /></div>}
             <div style={{ marginTop: 12 }}>
               <Progress percent={ipPercent} status={ipPercent > 85 ? 'exception' : 'normal'} />
               <div className="muted">可用 {stats.usable.toLocaleString()} · 已用 {stats.used.toLocaleString()} · 空闲 {stats.free.toLocaleString()}</div>

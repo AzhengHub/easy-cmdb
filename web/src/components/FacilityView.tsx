@@ -17,6 +17,7 @@ interface Props {
   assets: Asset[]
   links: Link[]
   editable: boolean
+  dark: boolean
   focus: AssetLocation | null
   reload: () => Promise<void>
   onOpenAsset: (id: number) => void
@@ -36,7 +37,7 @@ interface MountDraft {
   units: number
 }
 
-export function FacilityView({ layout, assets, links, editable, focus, reload, onOpenAsset, onSessionError }: Props) {
+export function FacilityView({ layout, assets, links, editable, dark, focus, reload, onOpenAsset, onSessionError }: Props) {
   const [roomId, setRoomId] = useState<number | null>(null)
   const [rackId, setRackId] = useState<number | null>(null)
   const [focused, setFocused] = useState<number | null>(null)
@@ -459,7 +460,7 @@ export function FacilityView({ layout, assets, links, editable, focus, reload, o
             ) : (
               <RoomScene
                 room={room} racks={racks} placements={roomPlacements} assets={byId}
-                selectedRack={rackId} selectedAsset={focused}
+                selectedRack={rackId} selectedAsset={focused} dark={dark}
                 onRack={selectRack} onDevice={openSceneDevice}
               />
             )}

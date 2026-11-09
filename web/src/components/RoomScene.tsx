@@ -17,6 +17,7 @@ interface Props {
   assets: Map<number, Asset>
   selectedRack: number | null
   selectedAsset: number | null
+  dark: boolean
   onRack: (id: number) => void
   onDevice: (assetId: number, rackId: number) => void
 }
@@ -80,13 +81,13 @@ export function RoomScene(props: Props) {
     state.current.cabinets = undefined
   }, [scene])
 
-  const label = useCallback((text: string, selected: boolean) => {
+  const label = useCallback((text: string, selected: boolean, dark: boolean) => {
     const canvas = document.createElement('canvas')
     canvas.width = 256
     canvas.height = 64
     const ctx = canvas.getContext('2d')
     if (!ctx) return null
-    ctx.fillStyle = selected ? '#1559c1' : '#193252'
+    ctx.fillStyle = dark ? (selected ? '#1559c1' : '#262626') : (selected ? '#1559c1' : '#193252')
     ctx.fillRect(0, 0, 256, 64)
     ctx.fillStyle = '#ffffff'
     ctx.font = 'bold 31px system-ui, sans-serif'
@@ -104,6 +105,8 @@ export function RoomScene(props: Props) {
     if (!state.current.renderer) return
     disposeRoom()
     const p = propsRef.current
+    const dark = p.dark
+    scene.background = new Color(dark ? 0x141414 : 0xeff5fc)
     const roomModel = new Group()
     const cabinets = new Group()
     roomModel.add(cabinets)
@@ -112,7 +115,7 @@ export function RoomScene(props: Props) {
     state.current.cabinets = cabinets
 
     const { columns, rows } = p.room
-    const floor = new Mesh(new PlaneGeometry(columns, rows), new MeshStandardMaterial({ color: 0xdfe8f3 }))
+    const floor = new Mesh(new PlaneGeometry(columns, rows), new MeshStandardMaterial({ color: dark ? 0x262626 : 0xdfe8f3 }))
     floor.rotation.x = -Math.PI / 2
     floor.position.set(columns / 2, 0, rows / 2)
     roomModel.add(floor)
@@ -122,11 +125,12 @@ export function RoomScene(props: Props) {
     for (let row = 0; row <= rows; row++) grid.push(0, .003, row, columns, .003, row)
     const gridGeometry = new BufferGeometry()
     gridGeometry.setAttribute('position', new Float32BufferAttribute(grid, 3))
-    roomModel.add(new LineSegments(gridGeometry, new LineBasicMaterial({ color: 0xa5b9d1 })))
+    roomModel.add(new LineSegments(gridGeometry, new LineBasicMaterial({ color: dark ? 0x434343 : 0xa5b9d1 })))
 
-    const frame = new MeshStandardMaterial({ color: 0x405777 })
-    const selectedFrame = new MeshStandardMaterial({ color: 0x1e64ce })
-    const back = new MeshStandardMaterial({ color: 0x253950 })
+    const frame = new MeshStandardMaterial({ color: dark ? 0x8c8c8c : 0x405777 })
+    const selectedFrame = new MeshStandardMaterial({ color: dark ? 0x1677ff : 0x1e64ce })
+    const back = new MeshStandardMaterial({ color: dark ? 0x1f1f1f : 0x253950 })
+    const panelColors = dark ? { host: 0x4096ff, switch: 0x13c2c2 } : deviceColors
     const panelMaterials = new Map<string, MeshStandardMaterial>()
     const byRack = new Map<number, Placement[]>()
     for (const placement of p.placements) {
@@ -158,7 +162,7 @@ export function RoomScene(props: Props) {
       box(.047, height, .72, -.367, height / 2, 0, structure)
       box(.047, height, .72, .367, height / 2, 0, structure)
       box(.69, height - .08, .04, 0, height / 2, -.33, back)
-      const rackTag = label(rack.name, chosen)
+      const rackTag = label(rack.name, chosen, dark)
       if (rackTag) {
         rackTag.position.y = height + .14
         rackTag.userData.rackId = rack.id
@@ -171,7 +175,7 @@ export function RoomScene(props: Props) {
         const materialKey = focused ? 'selected' : kind
         let material = panelMaterials.get(materialKey)
         if (!material) {
-          material = new MeshStandardMaterial({ color: focused ? 0xf5ad28 : (deviceColors[kind] ?? 0x3975cc) })
+          material = new MeshStandardMaterial({ color: focused ? 0xf5ad28 : (panelColors[kind] ?? 0x3975cc) })
           panelMaterials.set(materialKey, material)
         }
         const tall = placement.units * unitHeight
@@ -290,7 +294,7 @@ export function RoomScene(props: Props) {
 
   useEffect(() => {
     rebuildRoom()
-  }, [props.room, props.racks, props.placements, props.assets, props.selectedRack, props.selectedAsset, rebuildRoom])
+  }, [props.room, props.racks, props.placements, props.assets, props.selectedRack, props.selectedAsset, props.dark, rebuildRoom])
 
   return (
     <div className="room-scene">

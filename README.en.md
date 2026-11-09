@@ -6,6 +6,8 @@ Easy CMDB is a simple, easy-to-use configuration management database for IT asse
 
 Easy CMDB uses Go, React 19 with TypeScript, Ant Design 6, ECharts, and SQLite. One Go binary, the built `web/dist` assets, and one SQLite file are all it needs; there is no separate database service to deploy. The current release uses SQLite, and a MySQL or PostgreSQL backend can be added later if needed.
 
+The interface supports light and dark themes. It follows the system preference on first visit, can be switched from the login page or header, and remembers the choice in the browser.
+
 ## Scope
 
 - Around 3,000 virtual machines with a total footprint under 5,000 hosts on a single node.
