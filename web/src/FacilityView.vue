@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
-import { Box, Grid2X2, MapPin, Plus, Search, Server } from '@lucide/vue'
+import {
+  AppstoreOutlined, CloudServerOutlined, PlusOutlined, SearchOutlined, TableOutlined,
+} from '@ant-design/icons-vue'
 import { api, APIError } from './api'
 import type { Asset, Link } from './api'
 import { assetLocations, isMountKind, locationLabel, mountKinds, uRange } from './facilities'
@@ -179,7 +181,6 @@ function saveRoom() {
 }
 
 function removeRoom(value: Room) {
-  if (!window.confirm('删除空数据中心「' + value.name + '」？')) return
   void mutate(() => api('/rooms/' + value.id + '?version=' + value.version, 'DELETE'), resetForms, '数据中心已删除')
 }
 
@@ -203,7 +204,6 @@ function saveRack() {
 }
 
 function removeRack(value: Rack) {
-  if (!window.confirm('删除空机柜「' + value.name + '」？')) return
   void mutate(() => api('/racks/' + value.id + '?version=' + value.version, 'DELETE'), resetForms, '机柜已删除')
 }
 
@@ -295,7 +295,6 @@ function saveMount() {
 }
 
 function unmountDevice(value: Placement) {
-  if (!window.confirm('下架「' + nameOf(value.assetId) + '」？资产台账会保留。')) return
   void mutate(() => api('/assets/' + value.assetId + '/placement?version=' + value.version, 'DELETE'), () => {
     mountDraft.value = null
     if (focused.value === value.assetId) focused.value = null
@@ -310,85 +309,123 @@ function deviceRow(item: Placement) {
   const height = rack.value?.heightU ?? 1
   return (height - item.startU - item.units + 2) + ' / span ' + item.units
 }
+
+function changeRoom(value: unknown) {
+  if (value !== undefined && value !== null) selectRoom(Number(value))
+}
+
+function changeRack(value: unknown) {
+  if (value !== undefined && value !== null) selectRack(Number(value))
+}
 </script>
 
 <template>
   <div class="facilities">
-    <div class="panel facility-controls">
+    <a-card :bordered="false" size="small" class="facility-controls">
       <div class="facility-bar">
-        <label class="room-picker">
-          <span>数据中心</span>
-          <select :value="roomId ?? ''" :disabled="!rooms.length || busy" @change="selectRoom(Number(($event.target as HTMLSelectElement).value))">
-            <option v-if="!rooms.length" value="">暂无数据中心</option>
-            <option v-for="item in rooms" :key="item.id" :value="item.id">{{ item.name }}</option>
-          </select>
-        </label>
-        <label v-if="rooms.length" class="search location-search"><Search :size="16" /><input v-model="search" aria-label="定位资产" placeholder="搜索已上架资产、数据中心或机柜…" /></label>
-        <div v-if="editable" class="facility-actions">
-          <button type="button" class="button primary" :disabled="busy" @click="editRoom()"><Plus :size="16" /> 新增数据中心</button>
-          <button v-if="room" type="button" class="button" :disabled="busy" @click="editRoom(room)">编辑数据中心</button>
-        </div>
-      </div>
-      <div v-if="search.trim()" class="location-results" aria-label="资产定位结果">
-        <button v-for="result in searchResults" :key="result.asset.id" class="location-result" type="button" @click="showLocation(result.location)">
-          <strong>{{ result.asset.name }}</strong><span class="muted">{{ locationLabel(result.location) }}</span>
-        </button>
-        <p v-if="!searchResults.length" class="muted">暂无匹配的上架位置</p>
+        <a-space wrap :size="8">
+          <span class="muted">数据中心</span>
+          <a-select :value="roomId ?? undefined" style="width: 200px" :disabled="!rooms.length || busy"
+            placeholder="暂无数据中心" @change="changeRoom">
+            <a-select-option v-for="item in rooms" :key="item.id" :value="item.id">{{ item.name }}</a-select-option>
+          </a-select>
+          <a-input v-if="rooms.length" v-model:value="search" allow-clear placeholder="搜索已上架资产、数据中心或机柜…" style="width: 280px">
+            <template #prefix><SearchOutlined /></template>
+          </a-input>
+        </a-space>
+        <a-space v-if="editable" wrap>
+          <a-button type="primary" :disabled="busy" @click="editRoom()"><PlusOutlined /> 新增数据中心</a-button>
+          <a-button v-if="room" :disabled="busy" @click="editRoom(room)">编辑数据中心</a-button>
+        </a-space>
       </div>
 
-      <form v-if="roomDraft" class="facility-form" aria-label="数据中心配置" @submit.prevent="saveRoom">
-        <label class="facility-wide">数据中心名称<input v-model.trim="roomDraft.name" placeholder="例如：北京数据中心" maxlength="160" required /></label>
-        <label>列数<input v-model.number="roomDraft.columns" type="number" min="1" max="24" required /></label>
-        <label>行数<input v-model.number="roomDraft.rows" type="number" min="1" max="24" required /></label>
-        <div class="facility-actions">
-          <button class="button primary" :disabled="busy">保存数据中心</button>
-          <button type="button" class="button" @click="roomDraft = null">取消</button>
-          <button v-if="roomDraft.id && room?.id === roomDraft.id && !racks.length" type="button" class="button" :disabled="busy" @click="removeRoom(room)">删除空数据中心</button>
-        </div>
-      </form>
-    </div>
+      <a-list v-if="search.trim()" :data-source="searchResults" size="small" class="location-results">
+        <template #renderItem="{ item }">
+          <a-list-item>
+            <a-button type="link" class="location-result" @click="showLocation(item.location)">
+              <strong>{{ item.asset.name }}</strong><span class="muted">{{ locationLabel(item.location) }}</span>
+            </a-button>
+          </a-list-item>
+        </template>
+      </a-list>
+      <a-empty v-if="search.trim() && !searchResults.length" description="暂无匹配的上架位置" class="compact-empty" />
 
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
-    <p v-if="feedback" class="facility-feedback" role="status">{{ feedback }}</p>
+      <a-form v-if="roomDraft" layout="inline" class="facility-form" @finish="saveRoom">
+        <a-form-item label="数据中心名称"><a-input v-model:value="roomDraft.name" placeholder="例如：北京数据中心" :maxlength="160" /></a-form-item>
+        <a-form-item label="列数"><a-input-number v-model:value="roomDraft.columns" :min="1" :max="24" /></a-form-item>
+        <a-form-item label="行数"><a-input-number v-model:value="roomDraft.rows" :min="1" :max="24" /></a-form-item>
+        <a-form-item>
+          <a-space>
+            <a-button type="primary" html-type="submit" :loading="busy">保存数据中心</a-button>
+            <a-button @click="roomDraft = null">取消</a-button>
+            <a-popconfirm v-if="roomDraft.id && room?.id === roomDraft.id && !racks.length" title="删除该空数据中心？"
+              ok-text="删除" cancel-text="取消" @confirm="removeRoom(room)">
+              <a-button danger :disabled="busy">删除空数据中心</a-button>
+            </a-popconfirm>
+          </a-space>
+        </a-form-item>
+      </a-form>
+    </a-card>
 
-    <div v-if="!room" class="panel empty-state">
-      <MapPin :size="27" /><h3>暂无数据中心</h3>
-      <p>{{ editable ? '新增一个数据中心，就可以开始摆放机柜。' : '数据中心录入后会显示在这里。' }}</p>
-    </div>
+    <a-alert v-if="error" type="error" :message="error" show-icon />
+    <a-alert v-if="feedback" type="success" :message="feedback" show-icon />
+
+    <a-card v-if="!room" :bordered="false">
+      <a-empty description="暂无数据中心">
+        <a-button v-if="editable" type="primary" @click="editRoom()">新增数据中心</a-button>
+      </a-empty>
+    </a-card>
 
     <div v-else class="facility-workspace">
-      <section class="panel floor-panel">
-        <div class="panel-heading facility-heading">
-          <div><h2>{{ room.name }}</h2><p class="muted">{{ room.columns }} 列 × {{ room.rows }} 行 · {{ racks.length }} 台机柜</p></div>
-          <div class="facility-actions">
-            <button v-if="editable" type="button" class="button small" :disabled="busy" @click="editRack()"><Plus :size="15" /> 新增机柜</button>
-          </div>
-        </div>
+      <a-card :bordered="false" class="floor-panel">
+        <template #title>
+          <a-space wrap>
+            <span>{{ room.name }}</span>
+            <span class="muted">{{ room.columns }} 列 × {{ room.rows }} 行 · {{ racks.length }} 台机柜</span>
+          </a-space>
+        </template>
+        <template #extra>
+          <a-button v-if="editable" size="small" :disabled="busy" @click="editRack()"><PlusOutlined /> 新增机柜</a-button>
+        </template>
 
-        <form v-if="rackDraft" class="facility-form rack-form" aria-label="机柜配置" @submit.prevent="saveRack">
-          <label class="facility-wide">机柜编号<input v-model.trim="rackDraft.name" placeholder="例如：A-01" maxlength="80" required /></label>
-          <label>机柜高度（U）<input v-model.number="rackDraft.heightU" type="number" min="1" max="80" required /></label>
-          <label>列<input v-model.number="rackDraft.column" type="number" min="1" :max="room.columns" required /></label>
-          <label>行<input v-model.number="rackDraft.row" type="number" min="1" :max="room.rows" required /></label>
-          <label>朝向<select v-model.number="rackDraft.rotation"><option :value="0">向下</option><option :value="90">向左</option><option :value="180">向上</option><option :value="270">向右</option></select></label>
-          <div class="facility-actions">
-            <button class="button primary" :disabled="busy">保存机柜</button>
-            <button type="button" class="button" @click="rackDraft = null">取消</button>
-            <button v-if="rackDraft.id && rack?.id === rackDraft.id && !devices.length" type="button" class="button" :disabled="busy" @click="removeRack(rack)">删除空机柜</button>
-          </div>
-        </form>
+        <a-form v-if="rackDraft" layout="inline" class="facility-form rack-form" @finish="saveRack">
+          <a-form-item label="机柜编号"><a-input v-model:value="rackDraft.name" placeholder="例如：A-01" :maxlength="80" /></a-form-item>
+          <a-form-item label="高度（U）"><a-input-number v-model:value="rackDraft.heightU" :min="1" :max="80" /></a-form-item>
+          <a-form-item label="列"><a-input-number v-model:value="rackDraft.column" :min="1" :max="room.columns" /></a-form-item>
+          <a-form-item label="行"><a-input-number v-model:value="rackDraft.row" :min="1" :max="room.rows" /></a-form-item>
+          <a-form-item label="朝向">
+            <a-select v-model:value="rackDraft.rotation" style="width: 100px">
+              <a-select-option :value="0">向下</a-select-option>
+              <a-select-option :value="90">向左</a-select-option>
+              <a-select-option :value="180">向上</a-select-option>
+              <a-select-option :value="270">向右</a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item>
+            <a-space>
+              <a-button type="primary" html-type="submit" :loading="busy">保存机柜</a-button>
+              <a-button @click="rackDraft = null">取消</a-button>
+              <a-popconfirm v-if="rackDraft.id && rack?.id === rackDraft.id && !devices.length" title="删除该空机柜？"
+                ok-text="删除" cancel-text="取消" @confirm="removeRack(rack)">
+                <a-button danger :disabled="busy">删除空机柜</a-button>
+              </a-popconfirm>
+            </a-space>
+          </a-form-item>
+        </a-form>
 
         <div class="floor-toolbar">
-          <div class="floor-tabs" role="group" aria-label="布局视图">
-            <button type="button" class="button small" :aria-pressed="view === 'floor'" @click="view = 'floor'"><Grid2X2 :size="15" /> 平面布局</button>
-            <button type="button" class="button small" :aria-pressed="view === '3d'" @click="view = '3d'"><Box :size="15" /> 3D 总览</button>
-          </div>
-          <label v-if="racks.length" class="rack-picker">机柜
-            <select :value="rackId ?? ''" :disabled="busy" @change="selectRack(Number(($event.target as HTMLSelectElement).value))">
-              <option v-for="item in racks" :key="item.id" :value="item.id">{{ item.name }}</option>
-            </select>
-          </label>
+          <a-space>
+            <a-button :type="view === 'floor' ? 'primary' : 'default'" size="small" @click="view = 'floor'"><TableOutlined /> 平面布局</a-button>
+            <a-button :type="view === '3d' ? 'primary' : 'default'" size="small" @click="view = '3d'"><AppstoreOutlined /> 3D 总览</a-button>
+          </a-space>
+          <a-space v-if="racks.length">
+            <span class="muted">机柜</span>
+            <a-select :value="rackId ?? undefined" style="width: 140px" :disabled="busy" @change="changeRack">
+              <a-select-option v-for="item in racks" :key="item.id" :value="item.id">{{ item.name }}</a-select-option>
+            </a-select>
+          </a-space>
         </div>
+
         <div v-if="view === 'floor'" class="floor-scroll">
           <div class="floor-grid" :style="{ gridTemplateColumns: 'repeat(' + room.columns + ', minmax(54px, 1fr))' }">
             <div v-for="cell in cells" :key="cell.key" class="floor-cell" :class="{ 'drop-cell': dragRack && !cell.rack }"
@@ -396,7 +433,7 @@ function deviceRow(item: Placement) {
               @dragover="allowDrop($event, !!cell.rack)" @drop="moveRack($event, cell.column, cell.row, !!cell.rack)">
               <button v-if="cell.rack" class="rack-tile" type="button" :aria-pressed="cell.rack.id === rackId"
                 :draggable="editable && !busy" @click="selectRack(cell.rack.id)" @dragstart="startDrag($event, cell.rack)" @dragend="dragRack = null">
-                <Server :size="16" />
+                <CloudServerOutlined />
                 <strong>{{ cell.rack.name }}</strong>
                 <span class="rack-direction" aria-hidden="true" :style="{ transform: 'rotate(' + cell.rack.rotation + 'deg)' }">↓</span>
               </button>
@@ -407,53 +444,63 @@ function deviceRow(item: Placement) {
         </div>
         <RoomScene v-else :room="room" :racks="racks" :placements="roomPlacements" :assets="byId"
           :selected-rack="rackId" :selected-asset="focused" @rack="selectRack" @device="openSceneDevice" />
-      </section>
+      </a-card>
 
-      <section class="panel rack-panel">
+      <a-card :bordered="false" class="rack-panel">
+        <template #title>
+          <a-space v-if="rack" wrap>
+            <span>{{ rack.name }} · 机柜正视图</span>
+            <span class="muted">已用 {{ usedU }} / {{ rack.heightU }}U · 剩余 {{ rack.heightU - usedU }}U</span>
+          </a-space>
+        </template>
+        <template #extra>
+          <a-space v-if="editable && rack">
+            <a-button size="small" :disabled="busy" @click="editRack(rack)">编辑机柜</a-button>
+            <a-button size="small" type="primary" :disabled="busy || usedU === rack.heightU" @click="editMount()">
+              <PlusOutlined /> 上架设备
+            </a-button>
+          </a-space>
+        </template>
         <template v-if="rack">
-          <div class="panel-heading facility-heading">
-            <div><h2>{{ rack.name }} · 机柜正视图</h2><p class="muted">已用 {{ usedU }} / {{ rack.heightU }}U · 剩余 {{ rack.heightU - usedU }}U</p></div>
-            <div v-if="editable" class="facility-actions">
-              <button type="button" class="button small" :disabled="busy" @click="editRack(rack)">编辑机柜</button>
-              <button type="button" class="button small primary" :disabled="busy || usedU === rack.heightU" @click="editMount()"><Plus :size="14" /> 上架设备</button>
-            </div>
-          </div>
 
-          <form v-if="mountDraft" class="facility-form mount-form" aria-label="设备上架" @submit.prevent="saveMount">
-            <label class="facility-wide">录入方式
-              <select v-model="mountDraft.mode" @change="changeMountMode">
-                <option value="existing">关联已有资产</option><option value="new">新建资产并上架</option>
-              </select>
-            </label>
+          <a-form v-if="mountDraft" layout="inline" class="facility-form mount-form" @finish="saveMount">
+            <a-form-item label="录入方式">
+              <a-select v-model:value="mountDraft.mode" style="width: 150px" @change="changeMountMode">
+                <a-select-option value="existing">关联已有资产</a-select-option>
+                <a-select-option value="new">新建资产并上架</a-select-option>
+              </a-select>
+            </a-form-item>
             <template v-if="mountDraft.mode === 'existing'">
-              <label class="facility-wide">选择设备
-                <select v-model.number="mountDraft.assetId" required @change="changeDevice">
-                  <option :value="0">请选择资产</option>
-                  <option v-for="asset in candidates" :key="asset.id" :value="asset.id">
+              <a-form-item label="选择设备">
+                <a-select v-model:value="mountDraft.assetId" style="width: 250px" @change="changeDevice">
+                  <a-select-option :value="0">请选择资产</a-select-option>
+                  <a-select-option v-for="asset in candidates" :key="asset.id" :value="asset.id">
                     {{ asset.name }} · {{ mountKinds[asset.kind as MountKind] }} #{{ asset.id }}{{ mounted.has(asset.id) ? ' · 已上架' : '' }}
-                  </option>
-                </select>
-              </label>
-              <p v-if="mountLocation" class="muted form-note">当前位置：{{ locationLabel(mountLocation) }}</p>
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item v-if="mountLocation" label="当前位置">{{ locationLabel(mountLocation) }}</a-form-item>
             </template>
             <template v-else>
-              <label>设备类型
-                <select v-model="mountDraft.kind" @change="changeMountMode">
-                  <option v-for="(label, kind) in mountKinds" :key="kind" :value="kind">{{ label }}</option>
-                </select>
-              </label>
-              <label class="facility-wide">设备名称<input v-model.trim="mountDraft.name" required maxlength="160" /></label>
-              <label class="facility-wide">管理地址 / IP<input v-model.trim="mountDraft.address" maxlength="160" /></label>
+              <a-form-item label="设备类型">
+                <a-select v-model:value="mountDraft.kind" style="width: 110px" @change="changeMountMode">
+                  <a-select-option v-for="(label, kind) in mountKinds" :key="kind" :value="kind">{{ label }}</a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item label="设备名称"><a-input v-model:value="mountDraft.name" :maxlength="160" /></a-form-item>
+              <a-form-item label="管理地址 / IP"><a-input v-model:value="mountDraft.address" :maxlength="160" /></a-form-item>
             </template>
-            <label>起始 U 位<input v-model.number="mountDraft.startU" type="number" min="1" :max="rack.heightU" required /></label>
-            <label>占用 U 数<input v-model.number="mountDraft.units" type="number" min="1" :max="rack.heightU" required /></label>
-            <div class="facility-actions">
-              <button class="button primary" :disabled="busy || (mountDraft.mode === 'existing' && !mountDraft.assetId)">
-                {{ mountDraft.mode === 'existing' && mountDraft.version ? '保存位置' : '保存上架' }}
-              </button>
-              <button type="button" class="button" @click="mountDraft = null">取消</button>
-            </div>
-          </form>
+            <a-form-item label="起始 U 位"><a-input-number v-model:value="mountDraft.startU" :min="1" :max="rack.heightU" /></a-form-item>
+            <a-form-item label="占用 U 数"><a-input-number v-model:value="mountDraft.units" :min="1" :max="rack.heightU" /></a-form-item>
+            <a-form-item>
+              <a-space>
+                <a-button type="primary" html-type="submit" :loading="busy" :disabled="mountDraft.mode === 'existing' && !mountDraft.assetId">
+                  {{ mountDraft.mode === 'existing' && mountDraft.version ? '保存位置' : '保存上架' }}
+                </a-button>
+                <a-button @click="mountDraft = null">取消</a-button>
+              </a-space>
+            </a-form-item>
+          </a-form>
 
           <div ref="elevation" class="elevation-scroll">
             <div class="elevation-grid" :style="{ gridTemplateRows: 'repeat(' + rack.heightU + ', 22px)' }">
@@ -468,19 +515,26 @@ function deviceRow(item: Placement) {
               </button>
             </div>
           </div>
-          <div v-if="devices.length" class="rack-devices">
-            <div v-for="device in devices" :key="device.assetId" class="rack-device-row">
-              <button type="button" class="text-button" @click="emit('openAsset', device.assetId)">{{ nameOf(device.assetId) }}</button>
-              <span class="muted">{{ uRange(device) }}</span>
-              <div v-if="editable" class="facility-actions">
-                <button v-if="byId.get(device.assetId)?.lifecycle === 'active'" class="button small" type="button" :disabled="busy" @click="editMount(device)">调整</button>
-                <button class="button small" type="button" :disabled="busy" @click="unmountDevice(device)">下架</button>
-              </div>
-            </div>
-          </div>
+
+          <a-list v-if="devices.length" :data-source="devices" size="small" class="rack-devices">
+            <template #renderItem="{ item }">
+              <a-list-item>
+                <a-space>
+                  <a-button type="link" @click="emit('openAsset', item.assetId)">{{ nameOf(item.assetId) }}</a-button>
+                  <span class="muted">{{ uRange(item) }}</span>
+                </a-space>
+                <a-space v-if="editable">
+                  <a-button v-if="byId.get(item.assetId)?.lifecycle === 'active'" size="small" :disabled="busy" @click="editMount(item)">调整</a-button>
+                  <a-popconfirm title="下架该设备？资产台账会保留。" ok-text="下架" cancel-text="取消" @confirm="unmountDevice(item)">
+                    <a-button size="small" danger :disabled="busy">下架</a-button>
+                  </a-popconfirm>
+                </a-space>
+              </a-list-item>
+            </template>
+          </a-list>
         </template>
-        <div v-else class="empty-state"><Server :size="24" /><h3>请选择机柜</h3><p>机柜正视图会显示设备与 U 位。</p></div>
-      </section>
+        <a-empty v-else description="请选择机柜" />
+      </a-card>
     </div>
   </div>
 </template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Network, Plus, RefreshCw, Search, X } from '@lucide/vue'
+import { CloseOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { api, APIError } from './api'
 import type { Asset, IPUsage, Subnet, SubnetDetail, SubnetFields } from './api'
 
@@ -21,8 +21,8 @@ const busy = ref(false)
 const error = ref('')
 const feedback = ref('')
 
-const selected = computed(() => subnets.value.find(item => item.id === selectedId.value) ?? null)
 const editable = computed(() => props.editable)
+const selected = computed(() => subnets.value.find(item => item.id === selectedId.value) ?? null)
 const usage = computed(() => {
   const query = search.value.trim().toLowerCase()
   const rows = detail.value?.usedIps ?? []
@@ -33,6 +33,16 @@ const usage = computed(() => {
 const utilization = computed(() => {
   if (!detail.value || detail.value.usable <= 0) return 0
   return Math.min(100, Math.round(detail.value.used / detail.value.usable * 100))
+})
+const usageColumns = computed(() => {
+  const columns = [
+    { title: 'IP 地址', dataIndex: 'ip', key: 'ip', width: 135 },
+    { title: '状态', key: 'status', width: 90 },
+    { title: '资产 / 标签', key: 'owner' },
+    { title: '备注', key: 'notes' },
+  ]
+  if (editable.value) columns.push({ title: '', key: 'actions', width: 70 } as typeof columns[number])
+  return columns
 })
 
 onMounted(() => { void load() })
@@ -86,15 +96,15 @@ function addSubnet() {
 
 function editSubnet() {
   if (!selected.value) return
-  const subnet = selected.value
+  const item = selected.value
   draft.value = {
-    id: subnet.id,
-    version: subnet.version,
-    name: subnet.name,
-    cidr: subnet.cidr,
-    gateway: subnet.gateway,
-    vlan: subnet.vlan,
-    notes: subnet.notes,
+    id: item.id,
+    version: item.version,
+    name: item.name,
+    cidr: item.cidr,
+    gateway: item.gateway,
+    vlan: item.vlan,
+    notes: item.notes,
   }
 }
 
@@ -132,12 +142,11 @@ async function saveSubnet() {
 
 async function deleteSubnet() {
   if (!selected.value) return
-  const subnet = selected.value
-  if (!window.confirm(`删除网段「${subnet.name}（${subnet.cidr}）」？`)) return
+  const item = selected.value
   busy.value = true
   error.value = ''
   try {
-    await api(`/subnets/${subnet.id}?version=${subnet.version}`, 'DELETE')
+    await api(`/subnets/${item.id}?version=${item.version}`, 'DELETE')
     selectedId.value = null
     feedback.value = '网段已删除'
     await load()
@@ -175,7 +184,6 @@ async function allocate() {
 
 async function release(row: IPUsage) {
   if (!row.allocationId || !row.version) return
-  if (!window.confirm(`释放 IP「${row.ip}」？`)) return
   busy.value = true
   error.value = ''
   try {
@@ -211,8 +219,8 @@ function statusLabel(status: string) {
   return status === 'gateway' ? '网关' : status === 'asset' ? '资产地址' : '已分配'
 }
 
-function statusTone(status: string) {
-  return status === 'gateway' ? 'blue' : status === 'asset' ? 'gray' : 'green'
+function statusColor(status: string) {
+  return status === 'gateway' ? 'blue' : status === 'asset' ? 'default' : 'green'
 }
 
 function percent(subnet: Subnet) {
@@ -229,185 +237,164 @@ function assetLabel(asset: Asset) {
 </script>
 
 <template>
-  <section class="panel ipam-panel">
-    <div class="panel-heading">
-      <div><h2>网段与 IP 地址</h2><p class="muted">自动统计资产地址，支持手工分配和释放 IP</p></div>
-      <div class="heading-actions">
-        <button class="button" :disabled="loading" @click="load"><RefreshCw :size="16" /> 刷新</button>
-        <button v-if="editable" class="button primary" @click="addSubnet"><Plus :size="16" /> 新增网段</button>
-      </div>
-    </div>
+  <a-card :bordered="false" class="ipam-card">
+    <template #title>
+      <a-space>
+        <span>网段与 IP 地址</span>
+        <a-tag>{{ subnets.length }} 个网段</a-tag>
+      </a-space>
+    </template>
+    <template #extra>
+      <a-space>
+        <a-button :loading="loading" @click="load"><ReloadOutlined /> 刷新</a-button>
+        <a-button v-if="editable" type="primary" @click="addSubnet"><PlusOutlined /> 新增网段</a-button>
+      </a-space>
+    </template>
 
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
-    <p v-if="feedback" class="feedback" role="status">{{ feedback }}</p>
+    <a-alert v-if="error" type="error" :message="error" show-icon closable class="ipam-alert" @close="error = ''" />
+    <a-alert v-if="feedback" type="success" :message="feedback" show-icon closable class="ipam-alert" @close="feedback = ''" />
 
-    <div v-if="loading && !subnets.length" class="empty-state">正在加载 IPAM 数据…</div>
-    <div v-else-if="!subnets.length" class="empty-state">
-      <Network :size="28" />
-      <h3>暂无网段</h3>
-      <p>{{ editable ? '新增一个网段后，就可以查看空闲和已使用 IP。' : '网段录入后会显示在这里。' }}</p>
-    </div>
+    <a-card v-if="draft" size="small" class="edit-card">
+      <template #title>{{ draft.id ? '编辑网段' : '新增网段' }}</template>
+      <template #extra><a-button type="text" size="small" @click="cancelSubnet"><CloseOutlined /></a-button></template>
+      <a-form layout="vertical" :model="draft" @finish="saveSubnet">
+        <a-row :gutter="12">
+          <a-col :span="12"><a-form-item label="网段名称" required><a-input v-model:value="draft.name" :maxlength="160" placeholder="例如：办公网" /></a-form-item></a-col>
+          <a-col :span="12"><a-form-item label="CIDR" required><a-input v-model:value="draft.cidr" :maxlength="64" placeholder="例如：192.168.10.0/24" /></a-form-item></a-col>
+          <a-col :span="12"><a-form-item label="网关"><a-input v-model:value="draft.gateway" :maxlength="64" placeholder="例如：192.168.10.1" /></a-form-item></a-col>
+          <a-col :span="12"><a-form-item label="VLAN"><a-input v-model:value="draft.vlan" :maxlength="32" placeholder="例如：100" /></a-form-item></a-col>
+          <a-col :span="24"><a-form-item label="备注"><a-textarea v-model:value="draft.notes" :rows="2" :maxlength="2000" /></a-form-item></a-col>
+        </a-row>
+        <a-space>
+          <a-button type="primary" html-type="submit" :loading="busy">保存网段</a-button>
+          <a-button @click="cancelSubnet">取消</a-button>
+        </a-space>
+      </a-form>
+    </a-card>
+
+    <a-empty v-if="loading && !subnets.length" description="正在加载 IPAM 数据…" />
+    <a-empty v-else-if="!subnets.length" description="暂无网段，新增一个网段开始管理 IP 地址" />
 
     <div v-else class="ipam-layout">
-      <aside class="subnet-list" aria-label="网段列表">
-        <button v-for="subnet in subnets" :key="subnet.id" type="button" class="subnet-item"
-          :class="{ active: subnet.id === selectedId }" @click="selectSubnet(subnet.id)">
-          <span class="subnet-name">{{ subnet.name }}</span>
-          <span class="subnet-cidr mono">{{ subnet.cidr }}</span>
-          <span class="subnet-meta">VLAN {{ subnet.vlan || '—' }} · 已用 {{ count(subnet.used) }} / {{ count(subnet.usable) }}</span>
-          <span class="subnet-free">空闲 {{ count(subnet.free) }}</span>
-          <span class="bar"><i :style="{ width: percent(subnet) + '%' }"></i></span>
-        </button>
-      </aside>
+      <a-list :data-source="subnets" :split="false" class="subnet-list">
+        <template #renderItem="{ item }">
+          <a-list-item class="subnet-item" :class="{ active: item.id === selectedId }" @click="selectSubnet(item.id)">
+            <div class="subnet-content">
+              <div class="subnet-head">
+                <strong>{{ item.name }}</strong>
+                <a-tag class="mono">{{ item.cidr }}</a-tag>
+              </div>
+              <span class="muted">VLAN {{ item.vlan || '—' }} · 已用 {{ count(item.used) }} / {{ count(item.usable) }} · 空闲 {{ count(item.free) }}</span>
+              <a-progress :percent="percent(item)" size="small" :show-info="false" />
+            </div>
+          </a-list-item>
+        </template>
+      </a-list>
 
       <div class="subnet-detail">
-        <form v-if="draft" class="ipam-form" @submit.prevent="saveSubnet">
-          <div class="form-heading">
-            <h3>{{ draft.id ? '编辑网段' : '新增网段' }}</h3>
-            <button type="button" class="icon-button" aria-label="关闭网段表单" @click="cancelSubnet"><X :size="17" /></button>
-          </div>
-          <div class="form-grid">
-            <label>网段名称<input v-model.trim="draft.name" required maxlength="160" placeholder="例如：办公网" /></label>
-            <label>CIDR<input v-model.trim="draft.cidr" required maxlength="64" placeholder="例如：192.168.10.0/24" /></label>
-            <label>网关<input v-model.trim="draft.gateway" maxlength="64" placeholder="例如：192.168.10.1" /></label>
-            <label>VLAN<input v-model.trim="draft.vlan" maxlength="32" placeholder="例如：100" /></label>
-            <label class="wide">备注<textarea v-model.trim="draft.notes" rows="2" maxlength="2000" placeholder="可选" /></label>
-          </div>
-          <div class="form-actions">
-            <button class="button primary" :disabled="busy">保存网段</button>
-            <button type="button" class="button" @click="cancelSubnet">取消</button>
-          </div>
-        </form>
-
         <template v-if="detail">
-          <div class="detail-heading">
+          <div class="detail-head">
             <div>
-              <h3>{{ detail.name }}</h3>
-              <p class="muted mono">{{ detail.cidr }} · 网关 {{ detail.gateway || '—' }} · VLAN {{ detail.vlan || '—' }}</p>
+              <h2>{{ detail.name }}</h2>
+              <span class="muted mono">{{ detail.cidr }} · 网关 {{ detail.gateway || '—' }} · VLAN {{ detail.vlan || '—' }}</span>
             </div>
-            <div v-if="editable" class="heading-actions">
-              <button class="button small" @click="editSubnet">编辑</button>
-              <button class="button small" :disabled="busy" @click="deleteSubnet">删除</button>
-            </div>
+            <a-space v-if="editable">
+              <a-button size="small" @click="editSubnet">编辑</a-button>
+              <a-popconfirm title="确定删除该网段？" ok-text="删除" cancel-text="取消" @confirm="deleteSubnet">
+                <a-button size="small" danger :loading="busy">删除</a-button>
+              </a-popconfirm>
+            </a-space>
           </div>
           <p v-if="detail.notes" class="muted">{{ detail.notes }}</p>
 
-          <div class="ipam-stats">
-            <div class="ipam-stat"><span>可用地址</span><strong>{{ count(detail.usable) }}</strong></div>
-            <div class="ipam-stat"><span>已占用</span><strong>{{ count(detail.used) }}</strong></div>
-            <div class="ipam-stat"><span>空闲</span><strong>{{ count(detail.free) }}</strong></div>
-            <span class="ipam-progress"><i :style="{ width: utilization + '%' }"></i></span>
-            <span class="ipam-percent">{{ utilization }}% 使用率</span>
-          </div>
+          <a-row :gutter="12">
+            <a-col :span="8"><a-card size="small"><a-statistic title="可用地址" :value="detail.usable" /></a-card></a-col>
+            <a-col :span="8"><a-card size="small"><a-statistic title="已占用" :value="detail.used" /></a-card></a-col>
+            <a-col :span="8"><a-card size="small"><a-statistic title="空闲" :value="detail.free" /></a-card></a-col>
+          </a-row>
+          <a-progress :percent="utilization" size="small" class="usage-progress" />
 
-          <form v-if="editable" class="allocation-form" @submit.prevent="allocate">
-            <div class="form-heading"><h3>分配 IP</h3></div>
-            <div class="form-grid">
-              <label>IP 地址<input v-model.trim="allocation.ip" maxlength="64" placeholder="例如：192.168.10.20" /></label>
-              <label>关联资产
-                <select v-model.number="allocation.assetId">
-                  <option :value="0">不关联资产</option>
-                  <option v-for="asset in assets" :key="asset.id" :value="asset.id">{{ assetLabel(asset) }}</option>
-                </select>
-              </label>
-              <label>标签<input v-model.trim="allocation.label" maxlength="160" placeholder="例如：VIP / 网关备用" /></label>
-              <label>备注<input v-model.trim="allocation.notes" maxlength="2000" placeholder="可选" /></label>
-            </div>
-            <div class="form-actions">
-              <button class="button primary" :disabled="busy">分配</button>
-              <button type="button" class="button" :disabled="!detail.freeIps.length" @click="fillNextFree">使用下一个空闲 IP</button>
-            </div>
-          </form>
+          <a-card v-if="editable" size="small" title="分配 IP" class="allocate-card">
+            <a-form layout="vertical" :model="allocation" @finish="allocate">
+              <a-row :gutter="12">
+                <a-col :span="12"><a-form-item label="IP 地址"><a-input v-model:value="allocation.ip" :maxlength="64" placeholder="例如：192.168.10.20" /></a-form-item></a-col>
+                <a-col :span="12">
+                  <a-form-item label="关联资产">
+                    <a-select v-model:value="allocation.assetId">
+                      <a-select-option :value="0">不关联资产</a-select-option>
+                      <a-select-option v-for="asset in assets" :key="asset.id" :value="asset.id">{{ assetLabel(asset) }}</a-select-option>
+                    </a-select>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="12"><a-form-item label="标签"><a-input v-model:value="allocation.label" :maxlength="160" placeholder="例如：VIP" /></a-form-item></a-col>
+                <a-col :span="12"><a-form-item label="备注"><a-input v-model:value="allocation.notes" :maxlength="2000" /></a-form-item></a-col>
+              </a-row>
+              <a-space>
+                <a-button type="primary" html-type="submit" :loading="busy">分配</a-button>
+                <a-button :disabled="!detail.freeIps.length" @click="fillNextFree">使用下一个空闲 IP</a-button>
+              </a-space>
+            </a-form>
+          </a-card>
 
-          <div class="usage-heading">
-            <h3>已占用 IP <span class="muted">{{ count(detail.used) }}</span></h3>
-            <label class="search"><Search :size="16" /><input v-model="search" aria-label="搜索 IP" placeholder="搜索 IP、资产或标签" /></label>
+          <div class="section-head">
+            <h3>已占用 IP</h3>
+            <a-input v-model:value="search" allow-clear placeholder="搜索 IP、资产或标签" class="usage-search">
+              <template #prefix><SearchOutlined /></template>
+            </a-input>
           </div>
-          <div class="table-scroll ipam-table">
-            <table>
-              <thead><tr><th>IP</th><th>状态</th><th>资产 / 标签</th><th>备注</th><th v-if="editable"></th></tr></thead>
-              <tbody>
-                <tr v-for="row in usage" :key="row.ip">
-                  <td class="mono">{{ row.ip }}</td>
-                  <td><span class="tag" :class="statusTone(row.status)">{{ statusLabel(row.status) }}</span></td>
-                  <td>
-                    {{ row.assetName || row.label || '—' }}
-                    <small v-if="row.assetName && row.label" class="muted"> / {{ row.label }}</small>
-                  </td>
-                  <td>{{ row.notes || '—' }}</td>
-                  <td v-if="editable">
-                    <button v-if="row.status === 'allocated'" class="text-button" :disabled="busy" @click="release(row)">释放</button>
-                  </td>
-                </tr>
-                <tr v-if="!usage.length"><td :colspan="editable ? 5 : 4" class="muted">没有匹配的已占用 IP</td></tr>
-              </tbody>
-            </table>
-          </div>
+          <a-table :columns="usageColumns" :data-source="usage" row-key="ip" :pagination="false" size="small"
+            :scroll="{ y: 300 }" :locale="{ emptyText: '没有匹配的已占用 IP' }">
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'status'"><a-tag :color="statusColor(record.status)">{{ statusLabel(record.status) }}</a-tag></template>
+              <template v-else-if="column.key === 'owner'">
+                {{ record.assetName || record.label || '—' }}
+                <span v-if="record.assetName && record.label" class="muted"> / {{ record.label }}</span>
+              </template>
+              <template v-else-if="column.key === 'notes'">{{ record.notes || '—' }}</template>
+              <template v-else-if="column.key === 'actions'">
+                <a-popconfirm v-if="record.status === 'allocated'" title="释放该 IP？" ok-text="释放" cancel-text="取消" @confirm="release(record)">
+                  <a-button type="link" size="small" danger>释放</a-button>
+                </a-popconfirm>
+              </template>
+            </template>
+          </a-table>
 
-          <div class="free-section">
-            <h3>空闲 IP <span class="muted">显示前 {{ detail.freeIps.length }} 个 / 共 {{ count(detail.free) }}</span></h3>
-            <div class="ip-chips">
-              <button v-for="ip in detail.freeIps" :key="ip" type="button" class="ip-chip" :disabled="!editable"
-                @click="chooseFree(ip)">{{ ip }}</button>
-            </div>
-            <p v-if="!detail.freeIps.length" class="muted">该网段已无空闲 IP</p>
+          <div class="section-head">
+            <h3>空闲 IP</h3>
+            <span class="muted">显示前 {{ detail.freeIps.length }} 个 / 共 {{ count(detail.free) }} 个</span>
           </div>
+          <a-space wrap>
+            <a-button v-for="ip in detail.freeIps" :key="ip" size="small" class="mono" :disabled="!editable" @click="chooseFree(ip)">{{ ip }}</a-button>
+          </a-space>
+          <a-empty v-if="!detail.freeIps.length" description="该网段已无空闲 IP" />
         </template>
-
-        <div v-else class="empty-state compact">选择左侧网段查看地址</div>
+        <a-empty v-else description="选择左侧网段查看地址" />
       </div>
     </div>
-  </section>
+  </a-card>
 </template>
 
 <style scoped>
-.ipam-panel { overflow: hidden; }
-.feedback { color: #1d6156; background: #edf9f4; border: 1px solid #c6e8da; border-radius: 8px; margin: 0 19px 12px; padding: 8px 10px; font-size: 12px; }
-.ipam-layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 15px; padding: 0 19px 19px; }
-.subnet-list { display: flex; flex-direction: column; gap: 7px; max-height: 720px; overflow: auto; }
-.subnet-item { display: flex; flex-direction: column; gap: 4px; width: 100%; border: 1px solid #e3eaf3; border-radius: 9px; background: #fff; padding: 10px 11px; text-align: left; color: #243752; }
-.subnet-item:hover { border-color: #adc9f1; background: #f8fbff; }
-.subnet-item.active { border-color: #7fa9ea; background: #f3f8ff; box-shadow: inset 3px 0 0 var(--primary); }
-.subnet-name { font-size: 13px; font-weight: 650; }
-.subnet-cidr { font-size: 12px; color: #415a79; }
-.subnet-meta, .subnet-free { font-size: 11px; color: #6b7f9d; }
-.subnet-free { color: #1d6156; }
-.bar { height: 4px; border-radius: 4px; background: #eaf0f7; overflow: hidden; margin-top: 2px; }
-.bar i { display: block; height: 100%; background: #4c91ff; border-radius: inherit; }
+.ipam-card { min-height: 360px; }
+.ipam-alert { margin-bottom: 12px; }
+.ipam-layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 18px; }
+.subnet-list { border: 1px solid #f0f0f0; border-radius: 8px; padding: 8px; max-height: 720px; overflow: auto; }
+.subnet-item { cursor: pointer; padding: 10px !important; border-radius: 6px; }
+.subnet-item:hover { background: #fafafa; }
+.subnet-item.active { background: #e6f4ff; }
+.subnet-content { display: flex; flex-direction: column; gap: 4px; width: 100%; min-width: 0; }
+.subnet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.subnet-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subnet-detail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.ipam-form, .allocation-form { border: 1px solid #e3eaf3; border-radius: 9px; background: #fbfcff; padding: 13px; }
-.form-heading, .detail-heading, .usage-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.form-heading h3, .detail-heading h3, .usage-heading h3, .free-section h3 { font-size: 14px; color: #243752; }
-.detail-heading { align-items: flex-start; }
-.detail-heading p { margin-top: 4px; font-size: 12px; }
-.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 11px; margin-top: 10px; }
-.form-grid label { display: flex; flex-direction: column; gap: 4px; color: #536780; font-size: 11px; }
-.form-grid .wide { grid-column: 1 / -1; }
-.form-actions { display: flex; gap: 8px; margin-top: 11px; }
-.ipam-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; align-items: center; }
-.ipam-stat { border: 1px solid #e3eaf3; border-radius: 8px; padding: 9px 11px; display: flex; flex-direction: column; gap: 3px; background: #fff; }
-.ipam-stat span { color: #6b7f9d; font-size: 11px; }
-.ipam-stat strong { color: #1e3555; font-size: 19px; letter-spacing: -.03em; }
-.ipam-progress { grid-column: 1 / -1; height: 5px; background: #eaf0f7; border-radius: 4px; overflow: hidden; }
-.ipam-progress i { display: block; height: 100%; background: #4c91ff; border-radius: inherit; }
-.ipam-percent { grid-column: 1 / -1; color: #6b7f9d; font-size: 11px; margin-top: -4px; }
-.usage-heading { margin-top: 2px; }
-.usage-heading .search { width: min(250px, 100%); }
-.ipam-table { border: 1px solid #e3eaf3; border-radius: 8px; max-height: 320px; }
-.ipam-table table { min-width: 620px; }
-.ipam-table td, .ipam-table th { white-space: nowrap; }
-.ipam-table td:nth-child(3), .ipam-table td:nth-child(4) { white-space: normal; min-width: 130px; }
-.free-section { display: flex; flex-direction: column; gap: 8px; }
-.ip-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.ip-chip { border: 1px solid #cfe0f5; border-radius: 6px; background: #f5f9ff; color: #23548f; padding: 4px 7px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; }
-.ip-chip:not(:disabled):hover { background: #e8f2ff; border-color: #9fc1ee; }
+.detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.detail-head h2 { font-size: 18px; margin-bottom: 4px; }
+.usage-progress { margin-top: -4px; }
+.allocate-card { margin-top: 2px; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+.section-head h3 { font-size: 15px; }
+.usage-search { width: min(260px, 100%); }
 @media (max-width: 900px) {
   .ipam-layout { grid-template-columns: 1fr; }
   .subnet-list { max-height: none; }
-}
-@media (max-width: 560px) {
-  .form-grid, .ipam-stats { grid-template-columns: 1fr; }
-  .ipam-layout { padding-inline: 10px; }
-  .feedback { margin-inline: 10px; }
 }
 </style>

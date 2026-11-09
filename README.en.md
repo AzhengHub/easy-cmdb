@@ -4,7 +4,7 @@
 
 Easy CMDB is a simple, easy-to-use configuration management database for IT assets, infrastructure configuration, and asset relationships. It targets small, single-node operations: around 3,000 virtual machines with a total footprint under 5,000 hosts, maintained by a small operations team. The design goal is simple, sufficient, and easy to maintain: no extra middleware and no large-cluster ambitions. It tracks physical hosts, virtual machines, and switches, with asset search, relationship views, CSV import and export, IPAM subnet and address management, access controls, change history, and data center/rack views.
 
-Easy CMDB uses Go, Vue 3 with TypeScript, and SQLite. One Go binary, the built `web/dist` assets, and one SQLite file are all it needs; there is no separate database service to deploy. The current release uses SQLite, and a MySQL or PostgreSQL backend can be added later if needed.
+Easy CMDB uses Go, Vue 3 with TypeScript, Ant Design Vue, and SQLite. One Go binary, the built `web/dist` assets, and one SQLite file are all it needs; there is no separate database service to deploy. The current release uses SQLite, and a MySQL or PostgreSQL backend can be added later if needed.
 
 ## Scope
 

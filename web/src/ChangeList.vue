@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { History } from '@lucide/vue'
 import type { Change } from './api'
 
 defineProps<{ changes: Change[]; hideAsset?: boolean }>()
@@ -57,32 +56,44 @@ function value(value: unknown): string {
 }
 
 function differences(change: Change) {
-  if (!change.before || !change.after || !['update', 'sync', 'room_update', 'rack_update'].includes(change.action)) return []
+  if (!change.before || !change.after || !['update', 'sync', 'room_update', 'rack_update', 'subnet_update'].includes(change.action)) return []
   return Object.entries(change.after)
     .filter(([key, after]) => value(change.before?.[key]) !== value(after))
     .map(([key, after]) => ({ field: fieldLabels[key] ?? key, before: value(change.before?.[key]), after: value(after) }))
 }
+
+function date(value: string) {
+  return new Date(value).toLocaleString('zh-CN', { hour12: false })
+}
 </script>
 
 <template>
-  <div v-if="!changes.length" class="empty-state compact">
-    <History :size="23" /><p>暂无变更记录</p>
-  </div>
-  <div v-else class="change-list">
-    <article v-for="change in changes" :key="change.id" class="change-item">
-      <div class="change-dot"></div>
-      <div>
-        <div class="change-header">
-          <span class="tag blue">{{ actionLabels[change.action] ?? change.action }}</span>
-          <button v-if="!hideAsset && change.assetId" type="button" class="text-button" @click="emit('open', change.assetId)">{{ change.assetName }}</button>
-          <strong v-else-if="!hideAsset">{{ change.assetName }}</strong>
-          <span class="muted">{{ change.actor }} · {{ new Date(change.createdAt).toLocaleString('zh-CN', { hour12: false }) }}</span>
-        </div>
-        <p v-if="summary(change)" class="change-summary">{{ summary(change) }}</p>
-        <div v-for="diff in differences(change)" :key="diff.field" class="change-field">
-          <span>{{ diff.field }}</span><del>{{ diff.before }}</del><span aria-hidden="true">→</span><ins>{{ diff.after }}</ins>
-        </div>
+  <a-empty v-if="!changes.length" description="暂无变更记录" />
+  <a-timeline v-else>
+    <a-timeline-item v-for="change in changes" :key="change.id" color="blue">
+      <div class="change-head">
+        <a-tag>{{ actionLabels[change.action] ?? change.action }}</a-tag>
+        <a-button v-if="!hideAsset && change.assetId" type="link" size="small" @click="emit('open', change.assetId)">
+          {{ change.assetName }}
+        </a-button>
+        <strong v-else-if="!hideAsset">{{ change.assetName }}</strong>
+        <span class="muted">{{ change.actor }} · {{ date(change.createdAt) }}</span>
       </div>
-    </article>
-  </div>
+      <p v-if="summary(change)" class="change-summary">{{ summary(change) }}</p>
+      <div v-for="diff in differences(change)" :key="diff.field" class="change-field">
+        <span class="muted">{{ diff.field }}</span>
+        <del>{{ diff.before }}</del>
+        <span aria-hidden="true">→</span>
+        <ins>{{ diff.after }}</ins>
+      </div>
+    </a-timeline-item>
+  </a-timeline>
 </template>
+
+<style scoped>
+.change-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.change-summary { margin-top: 6px; color: #595959; }
+.change-field { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; font-size: 12px; }
+.change-field del { color: #8c8c8c; }
+.change-field ins { color: #389e0d; text-decoration: none; }
+</style>

@@ -283,7 +283,7 @@ onBeforeUnmount(() => {
   <div class="room-scene">
     <div ref="mount" class="room-scene-canvas"></div>
     <div v-if="unavailable" class="room-scene-message" role="status">当前浏览器无法显示 3D。可切换到平面布局继续查看和编辑。</div>
-    <button v-else type="button" class="button small scene-reset" @click="resetCamera">重置视角</button>
+    <a-button v-else size="small" class="scene-reset" @click="resetCamera">重置视角</a-button>
   </div>
 </template>
 

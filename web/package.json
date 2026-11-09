@@ -9,7 +9,8 @@
     "build": "vue-tsc --noEmit && vite build"
   },
   "dependencies": {
-    "@lucide/vue": "^1.69.0",
+    "@ant-design/icons-vue": "^7.0.1",
+    "ant-design-vue": "^4.2.6",
     "three": "^0.187.0",
     "vue": "^3.5.0"
   },

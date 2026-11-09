@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { message } from 'ant-design-vue'
 import {
-  Activity, ArrowDownToLine, ArrowRight, ChevronLeft, ChevronRight,
-  Database, HardDrive, History, LayoutGrid, Link2, LogOut, MapPin, Menu, Monitor,
-  Network, Pencil, Plus, Radio, RefreshCw, Search, Server, ShieldCheck, Upload, X,
-} from '@lucide/vue'
+  ApartmentOutlined, CloudServerOutlined, DashboardOutlined, DatabaseOutlined,
+  DesktopOutlined, DownloadOutlined, EditOutlined,
+  GlobalOutlined, HistoryOutlined, LogoutOutlined, MenuOutlined,
+  PlusOutlined, ReloadOutlined, SearchOutlined, UploadOutlined, UserOutlined,
+} from '@ant-design/icons-vue'
 import AssetEditor from './AssetEditor.vue'
 import ChangeList from './ChangeList.vue'
 import { api, apiCSV, APIError } from './api'
@@ -17,26 +19,26 @@ const IpamView = defineAsyncComponent(() => import('./IpamView.vue'))
 
 type Page = 'overview' | 'host' | 'vm' | 'ipam' | 'changes' | 'facilities'
 const navigation = [
-  { id: 'overview', title: '资源总览', icon: LayoutGrid, description: '查看物理资源和虚拟化资源。' },
-  { id: 'host', title: '物理机', icon: Server, description: '维护物理硬件、计算节点和宿主机。' },
-  { id: 'vm', title: '虚拟机', icon: Monitor, description: '查询虚拟机配置、运行状态和所在宿主机。' },
-  { id: 'facilities', title: '数据中心', icon: MapPin, description: '摆放机柜、管理设备 U 位，并在三维布局中定位资产。' },
-  { id: 'ipam', title: 'IPAM', icon: Network, description: '管理网段、已分配和空闲 IP 地址。' },
-  { id: 'changes', title: '变更记录', icon: History, description: '追溯人工修改和资源关系变化。' },
+  { id: 'overview', title: '资源总览', icon: DashboardOutlined, description: '查看物理资源和虚拟化资源。' },
+  { id: 'host', title: '物理机', icon: CloudServerOutlined, description: '维护物理硬件、计算节点和宿主机。' },
+  { id: 'vm', title: '虚拟机', icon: DesktopOutlined, description: '查询虚拟机配置、运行状态和所在宿主机。' },
+  { id: 'facilities', title: '数据中心', icon: ApartmentOutlined, description: '摆放机柜、管理设备 U 位，并在三维布局中定位资产。' },
+  { id: 'ipam', title: 'IPAM', icon: GlobalOutlined, description: '管理网段、已分配和空闲 IP 地址。' },
+  { id: 'changes', title: '变更记录', icon: HistoryOutlined, description: '追溯人工修改和资源关系变化。' },
 ] as const
 
 const kinds = {
-  host: { label: '物理机', icon: Server },
-  vm: { label: '虚拟机', icon: Monitor },
-  switch: { label: '交换机', icon: Network },
+  host: { label: '物理机', icon: CloudServerOutlined },
+  vm: { label: '虚拟机', icon: DesktopOutlined },
+  switch: { label: '交换机', icon: GlobalOutlined },
 }
 const statuses: Record<string, { label: string; tone: string }> = {
   online: { label: '在线', tone: 'green' },
   running: { label: '运行中', tone: 'green' },
-  stopped: { label: '已停止', tone: 'gray' },
-  paused: { label: '已暂停', tone: 'amber' },
+  stopped: { label: '已停止', tone: 'default' },
+  paused: { label: '已暂停', tone: 'orange' },
   offline: { label: '离线', tone: 'red' },
-  unknown: { label: '未知', tone: 'gray' },
+  unknown: { label: '未知', tone: 'default' },
 }
 const relations: { kind: LinkKind; from: Kind; to: Kind[]; outgoing: string; incoming: string }[] = [
   { kind: 'hosts', from: 'host', to: ['vm'], outgoing: '承载虚拟机', incoming: '所在宿主机' },
@@ -48,11 +50,11 @@ const busy = ref(false)
 const loginBusy = ref(false)
 const loginForm = ref({ username: '', password: '' })
 const error = ref('')
-const toast = ref('')
 const drawerError = ref('')
 const saving = ref(false)
 const page = ref<Page>('overview')
-const menuOpen = ref(false)
+const collapsed = ref(false)
+const drawerOpen = ref(false)
 const assets = ref<Asset[]>([])
 const links = ref<Link[]>([])
 const changes = ref<Change[]>([])
@@ -60,22 +62,18 @@ const facilities = ref<Facilities>({ rooms: [], racks: [], placements: [] })
 const facilityFocus = ref<AssetLocation | null>(null)
 const assetChanges = ref<Change[]>([])
 const keyword = ref('')
-const platformFilter = ref('')
-const kindFilter = ref('')
+const platformFilter = ref<string | undefined>(undefined)
+const kindFilter = ref<string | undefined>(undefined)
 const lifecycleFilter = ref('active')
 const pagination = ref(1)
 const pageSize = 10
-const drawer = ref<HTMLDialogElement>()
 const selectedId = ref<number | null>(null)
 const editor = ref(false)
 const newKind = ref<Kind>('host')
 const showRelationForm = ref(false)
 const relationChoice = ref('')
 const relationTarget = ref(0)
-const refreshedAt = ref('')
-const importInput = ref<HTMLInputElement>()
 const importing = ref(false)
-let toastTimeout = 0
 
 const selected = computed(() => assets.value.find(a => a.id === selectedId.value) ?? null)
 const activePage = computed(() => navigation.find(n => n.id === page.value)!)
@@ -97,11 +95,13 @@ const vmRelations = computed(() => {
   return data
 })
 const metrics = computed(() => [
-  { label: '物理机', count: activeAssets.value.filter(a => a.kind === 'host').length, icon: Server, target: 'host', tone: 'blue',
+  { label: '物理机', count: activeAssets.value.filter(a => a.kind === 'host').length, icon: CloudServerOutlined, target: 'host' as Page,
     hint: '独立主机与虚拟化节点' },
-  { label: '虚拟机', count: activeAssets.value.filter(a => a.kind === 'vm').length, icon: Monitor, target: 'vm', tone: 'violet',
+  { label: '虚拟机', count: activeAssets.value.filter(a => a.kind === 'vm').length, icon: DesktopOutlined, target: 'vm' as Page,
     hint: activeAssets.value.filter(a => a.kind === 'vm' && a.status === 'running').length + ' 台运行中' },
-] as const)
+])
+const canCreate = computed(() => editable.value && page.value !== 'changes' && page.value !== 'facilities' && page.value !== 'ipam')
+const drawerTitle = computed(() => editor.value ? (selected.value ? '编辑资产' : '新增资产') : (selected.value?.name ?? '资产详情'))
 
 const scope = computed(() => assets.value.filter(asset => {
   if (page.value === 'overview') return !kindFilter.value || asset.kind === kindFilter.value
@@ -116,11 +116,25 @@ const filtered = computed(() => {
       .some(value => value?.toLowerCase().includes(query))
   })
 })
-const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize)))
-const visible = computed(() => filtered.value.slice((pagination.value - 1) * pageSize, pagination.value * pageSize))
+const assetColumns = computed(() => [
+  { title: '资源名称', key: 'name', width: 260 },
+  { title: '类型', key: 'kind', width: 90 },
+  { title: '状态', key: 'status', width: 100 },
+  { title: page.value === 'vm' ? '宿主机' : '平台', key: 'meta', width: 130 },
+  { title: '地址 / IP', key: 'address', width: 160 },
+  { title: '负责人', key: 'owner', width: 120 },
+  { title: '', key: 'actions', width: 72 },
+])
+const tablePagination = computed(() => ({
+  current: pagination.value,
+  pageSize,
+  total: filtered.value.length,
+  showSizeChanger: false,
+  showTotal: (total: number) => `共 ${total} 条`,
+  onChange: (next: number) => { pagination.value = next },
+}))
 
 watch([keyword, platformFilter, kindFilter, lifecycleFilter], () => { pagination.value = 1 })
-watch(totalPages, count => { if (pagination.value > count) pagination.value = count })
 
 const relationOptions = computed(() => {
   const a = selected.value
@@ -145,14 +159,11 @@ const targets = computed(() => {
 })
 watch(relationChoice, () => { relationTarget.value = 0 })
 
-function date(text?: string | null) {
-  return text ? new Date(text).toLocaleString('zh-CN', { hour12: false }) : '—'
-}
 function platform(asset: { platform: string }) {
   return asset.platform === 'pve' ? 'Proxmox VE' : asset.platform === 'kvm' ? 'KVM' : '—'
 }
 function status(asset: Asset) {
-  if (asset.lifecycle === 'retired') return { label: '已退役', tone: 'gray' }
+  if (asset.lifecycle === 'retired') return { label: '已退役', tone: 'default' }
   return statuses[asset.status] ?? statuses.unknown
 }
 function relationLabel(link: Link) {
@@ -165,7 +176,7 @@ function relatedId(link: Link) {
 function hostName(asset: Asset) {
   return links.value.find(l => l.kind === 'hosts' && l.toId === asset.id)?.fromName ?? '—'
 }
-function message(e: unknown) {
+function messageText(e: unknown) {
   return e instanceof Error ? e.message : '操作失败'
 }
 function report(e: unknown, inDrawer = false) {
@@ -173,13 +184,11 @@ function report(e: unknown, inDrawer = false) {
     closeDrawer()
     user.value = null
   }
-  if (inDrawer && user.value) drawerError.value = message(e)
-  else error.value = message(e)
+  if (inDrawer && user.value) drawerError.value = messageText(e)
+  else error.value = messageText(e)
 }
 function notify(text: string) {
-  toast.value = text
-  window.clearTimeout(toastTimeout)
-  toastTimeout = window.setTimeout(() => { toast.value = '' }, 2800)
+  void message.success(text)
 }
 
 async function refresh() {
@@ -194,7 +203,6 @@ async function refresh() {
     links.value = nextLinks
     changes.value = nextChanges
     facilities.value = nextFacilities
-    refreshedAt.value = new Date().toISOString()
   } catch (e) {
     report(e)
   } finally {
@@ -241,26 +249,25 @@ onMounted(async () => {
 
 function goTo(next: Page) {
   page.value = next
-  menuOpen.value = false
+  if (window.innerWidth < 992) collapsed.value = true
   keyword.value = ''
-  kindFilter.value = ''
-  platformFilter.value = ''
+  kindFilter.value = undefined
+  platformFilter.value = undefined
   lifecycleFilter.value = 'active'
   pagination.value = 1
   facilityFocus.value = null
 }
-
+function onMenuClick({ key }: { key: string }) {
+  goTo(key as Page)
+}
 function showAssetLocation(location: AssetLocation) {
   closeDrawer()
   goTo('facilities')
   facilityFocus.value = location
 }
-function displayDrawer() {
-  if (!drawer.value?.open) drawer.value?.showModal()
-}
 function closeDrawer() {
   if (saving.value) return
-  drawer.value?.close()
+  drawerOpen.value = false
   selectedId.value = null
   editor.value = false
   drawerError.value = ''
@@ -273,7 +280,7 @@ async function openAsset(id: number) {
   editor.value = false
   drawerError.value = ''
   showRelationForm.value = false
-  displayDrawer()
+  drawerOpen.value = true
   try {
     const items = await api<Change[]>('/changes?assetId=' + id)
     if (selectedId.value === id) assetChanges.value = items
@@ -286,7 +293,7 @@ function startNew() {
   newKind.value = page.value === 'vm' ? 'vm' : 'host'
   editor.value = true
   drawerError.value = ''
-  displayDrawer()
+  drawerOpen.value = true
 }
 async function saveAsset(fields: AssetFields & { version: number }) {
   saving.value = true
@@ -370,14 +377,11 @@ function downloadTemplate() {
     '资源名称', '类型', '平台', '状态', '生命周期', '地址 / IP', 'CPU', '内存 MiB', '负责人', '环境', '备注', '扩展属性',
   ]])
 }
-function triggerImport() {
-  importInput.value?.click()
+function handleImportUpload(file: File) {
+  void importCSV(file)
+  return false
 }
-async function importCSV(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
+async function importCSV(file: File) {
   if (file.size > 16 * 1024 * 1024) {
     error.value = 'CSV 文件不能超过 16 MiB'
     return
@@ -397,209 +401,227 @@ async function importCSV(event: Event) {
 </script>
 
 <template>
-  <div v-if="checking" class="login-shell"><div class="loading"><Radio :size="24" /> 正在连接 Easy CMDB…</div></div>
-  <main v-else-if="!user" class="login-shell">
-    <div class="login-decoration" aria-hidden="true"><div></div><div></div><div></div></div>
-    <div class="login-card">
-      <div class="login-brand"><span class="brand-mark"><Radio :size="24" /></span> Easy CMDB</div>
-      <p class="eyebrow login-kicker">INFRASTRUCTURE INVENTORY</p>
-      <h1>登录资源管理台</h1>
-      <p class="muted">统一管理基础设施和虚拟机资源。</p>
-      <form class="login-form" @submit.prevent="login">
-        <p v-if="error" class="error" role="alert">{{ error }}</p>
-        <label>账号<input v-model="loginForm.username" autocomplete="username" required maxlength="80" /></label>
-        <label>密码<input v-model="loginForm.password" type="password" autocomplete="current-password" required maxlength="512" /></label>
-        <button class="button primary login-submit" :disabled="loginBusy">
-          {{ loginBusy ? '正在登录…' : '登录' }} <ArrowRight :size="17" />
-        </button>
-      </form>
+  <a-config-provider :theme="{ token: { colorPrimary: '#1677ff', borderRadius: 6 } }">
+    <div v-if="checking" class="app-loading"><a-spin size="large" /></div>
+
+    <div v-else-if="!user" class="login-page">
+      <a-card class="login-card" :bordered="false">
+        <div class="login-brand"><DatabaseOutlined /> Easy CMDB</div>
+        <a-alert v-if="error" type="error" :message="error" show-icon class="login-alert" />
+        <a-form layout="vertical" :model="loginForm" @finish="login">
+          <a-form-item label="账号" name="username" :rules="[{ required: true, message: '请输入账号' }]">
+            <a-input v-model:value="loginForm.username" autocomplete="username" size="large" />
+          </a-form-item>
+          <a-form-item label="密码" name="password" :rules="[{ required: true, message: '请输入密码' }]">
+            <a-input-password v-model:value="loginForm.password" autocomplete="current-password" size="large" />
+          </a-form-item>
+          <a-button type="primary" html-type="submit" block size="large" :loading="loginBusy">登录</a-button>
+        </a-form>
+      </a-card>
     </div>
-  </main>
-  <div v-else class="layout">
-    <button v-if="menuOpen" type="button" class="mobile-scrim" aria-label="关闭导航" @click="menuOpen = false"></button>
-    <aside class="sidebar" :class="{ 'mobile-open': menuOpen }">
-      <button class="brand" @click="goTo('overview')">
-        <span class="brand-mark"><Radio :size="23" /></span>
-        <span>Easy CMDB<small>基础设施管理</small></span>
-      </button>
-      <p class="nav-label">工作区</p>
-      <nav aria-label="主导航">
-        <button v-for="item in navigation" :key="item.id" class="nav-item" :class="{ active: page === item.id }"
-          :aria-current="page === item.id ? 'page' : undefined" @click="goTo(item.id)">
-          <component :is="item.icon" :size="17" /><span>{{ item.title }}</span>
-        </button>
-      </nav>
-      <div class="sidebar-foot"><span class="live-dot"></span> 资产管理工作区</div>
-    </aside>
 
-    <div class="workspace">
-      <header class="topbar">
-        <div class="breadcrumb">
-          <button class="icon-button mobile-menu" aria-label="打开导航" @click="menuOpen = true"><Menu :size="21" /></button>
-          <span class="breadcrumb-root">工作区</span><ChevronRight :size="14" /><strong>{{ activePage.title }}</strong>
+    <a-layout v-else class="app-layout">
+      <a-layout-sider v-model:collapsed="collapsed" breakpoint="lg" :collapsed-width="0" :trigger="null" class="app-sider">
+        <div class="brand" @click="goTo('overview')">
+          <DatabaseOutlined class="brand-icon" />
+          <span>Easy CMDB</span>
         </div>
-        <div class="topbar-actions">
-          <button class="icon-button" title="刷新数据" aria-label="刷新数据" :disabled="busy" @click="refresh">
-            <RefreshCw :size="17" :class="{ spinning: busy }" />
-          </button>
-          <div class="user-chip"><span class="avatar">{{ user.username.slice(0, 1).toUpperCase() }}</span>
-            <span class="user-name">{{ user.username }}<small>{{ { admin: '管理员', operator: '运维', viewer: '只读' }[user.role] }}</small></span>
-          </div>
-          <button class="icon-button" title="退出登录" aria-label="退出登录" @click="logout"><LogOut :size="17" /></button>
-        </div>
-      </header>
+        <a-menu mode="inline" :selected-keys="[page]" class="app-menu" @click="onMenuClick">
+          <a-menu-item v-for="item in navigation" :key="item.id">
+            <template #icon><component :is="item.icon" /></template>
+            {{ item.title }}
+          </a-menu-item>
+        </a-menu>
+      </a-layout-sider>
 
-      <main class="content">
-        <div class="page-heading">
-          <div>
-            <p class="eyebrow">INFRASTRUCTURE</p>
-            <h1>{{ activePage.title }}</h1>
-            <p class="muted">{{ activePage.description }}</p>
-          </div>
-          <button v-if="editable && page !== 'changes' && page !== 'facilities' && page !== 'ipam'" class="button primary" @click="startNew">
-            <Plus :size="17" /> 新增资产
-          </button>
-        </div>
-        <p v-if="error" class="error" role="alert">{{ error }}</p>
+      <a-layout>
+        <a-layout-header class="app-header">
+          <a-space>
+            <a-button type="text" @click="collapsed = !collapsed"><MenuOutlined /></a-button>
+          </a-space>
+          <a-space :size="4">
+            <a-tooltip title="刷新"><a-button type="text" :loading="busy" @click="refresh"><ReloadOutlined /></a-button></a-tooltip>
+            <a-dropdown>
+              <a-button type="text"><UserOutlined /> {{ user.username }}</a-button>
+              <template #overlay>
+                <a-menu>
+                  <a-menu-item key="logout" @click="logout"><LogoutOutlined /> 退出登录</a-menu-item>
+                </a-menu>
+              </template>
+            </a-dropdown>
+          </a-space>
+        </a-layout-header>
 
-        <section v-if="page === 'overview'" class="metrics" aria-label="资源统计">
-          <button v-for="metric in metrics" :key="metric.label" class="metric" @click="goTo(metric.target)">
-            <span class="metric-top">
-              <span class="metric-icon" :class="metric.tone"><component :is="metric.icon" :size="19" /></span>
-              <ArrowRight :size="16" class="metric-arrow" />
-            </span>
-            <span class="metric-count">{{ metric.count }}</span>
-            <span class="metric-label">{{ metric.label }}</span>
-            <span class="metric-hint">{{ metric.hint }}</span>
-          </button>
-        </section>
-
-        <section v-if="page === 'changes'" class="panel">
-          <div class="panel-heading"><div><h2>审计时间线</h2><p class="muted">最近 100 条变更</p></div><History :size="20" class="muted" /></div>
-          <ChangeList :changes="changes" @open="openAsset" />
-        </section>
-
-        <FacilityView v-else-if="page === 'facilities'" :layout="facilities" :assets="assets" :links="links"
-          :editable="editable" :focus="facilityFocus" :reload="refresh" @open-asset="openAsset" @session-error="report" />
-
-        <IpamView v-else-if="page === 'ipam'" :editable="editable" @session-error="report" />
-
-        <section v-else class="panel">
-          <div class="panel-heading">
-            <div><h2>{{ page === 'overview' ? '资源台账' : '资源列表' }}</h2><p class="muted">共 {{ filtered.length }} 条记录</p></div>
-            <div class="heading-actions">
-              <button v-if="editable" class="button" :disabled="importing" @click="triggerImport">
-                <Upload :size="16" /> {{ importing ? '导入中…' : '导入 CSV' }}
-              </button>
-              <button v-if="editable" class="button" @click="downloadTemplate">下载模板</button>
-              <button class="button" :disabled="!filtered.length" @click="exportCSV"><ArrowDownToLine :size="16" /> 导出 CSV</button>
+        <a-layout-content class="app-content">
+          <div class="page-header">
+            <div>
+              <h1>{{ activePage.title }}</h1>
+              <p class="page-desc">{{ activePage.description }}</p>
             </div>
-            <input ref="importInput" type="file" accept=".csv,text/csv" hidden @change="importCSV" />
+            <a-button v-if="canCreate" type="primary" @click="startNew"><PlusOutlined /> 新增资产</a-button>
           </div>
-          <div class="filters">
-            <label class="search"><Search :size="17" /><input v-model="keyword" aria-label="搜索资源" placeholder="搜索名称、IP、宿主机…" /></label>
-            <select v-if="page === 'overview'" v-model="kindFilter" aria-label="资源类型">
-              <option value="">全部类型</option><option v-for="(type, key) in kinds" :key="key" :value="key">{{ type.label }}</option>
-            </select>
-            <select v-model="platformFilter" aria-label="平台">
-              <option value="">全部平台</option><option value="pve">Proxmox VE</option><option value="kvm">KVM</option>
-            </select>
-            <select v-model="lifecycleFilter" aria-label="生命周期">
-              <option value="active">在册</option><option value="retired">已退役</option><option value="">全部生命周期</option>
-            </select>
-          </div>
-          <div v-if="!visible.length" class="empty-state">
-            <Database :size="28" /><h3>{{ busy ? '正在加载…' : '暂无匹配资源' }}</h3><p>可以调整筛选条件，或从新增资产开始。</p>
-          </div>
-          <div v-else class="table-scroll">
-            <table class="asset-table">
-              <thead><tr>
-                <th>资源名称</th><th>类型</th><th>状态</th><th>{{ page === 'vm' ? '宿主机' : '平台' }}</th><th>地址 / IP</th><th>负责人</th><th><span class="sr-only">详情</span></th>
-              </tr></thead>
-              <tbody>
-                <tr v-for="a in visible" :key="a.id">
-                  <td><button class="asset-name" @click="openAsset(a.id)">
-                    <span class="asset-icon" :class="a.kind"><component :is="kinds[a.kind].icon" :size="16" /></span>
-                    <span>{{ a.name }}<small v-if="a.environment">{{ a.environment }}</small></span>
-                  </button></td>
-                  <td>{{ kinds[a.kind].label }}</td>
-                  <td><span class="tag" :class="status(a).tone"><span class="status-dot"></span>{{ status(a).label }}</span></td>
-                  <td>{{ page === 'vm' ? hostName(a) : platform(a) }}</td><td class="mono">{{ a.address || '—' }}</td><td>{{ a.owner || '—' }}</td>
-                  <td><button class="icon-button table-action" :aria-label="'查看 ' + a.name" @click="openAsset(a.id)"><ChevronRight :size="17" /></button></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <footer class="panel-footer">
-            <span>{{ filtered.length ? (pagination - 1) * pageSize + 1 : 0 }}–{{ Math.min(pagination * pageSize, filtered.length) }} / {{ filtered.length }} 条</span>
-            <div class="pager"><button class="icon-button" aria-label="上一页" :disabled="pagination <= 1" @click="pagination--"><ChevronLeft :size="17" /></button>
-              <span>{{ pagination }} / {{ totalPages }}</span>
-              <button class="icon-button" aria-label="下一页" :disabled="pagination >= totalPages" @click="pagination++"><ChevronRight :size="17" /></button></div>
-          </footer>
-        </section>
-        <p v-if="refreshedAt" class="refresh-note"><Activity :size="14" /> 页面更新于 {{ date(refreshedAt) }}</p>
-      </main>
-    </div>
-  </div>
 
-  <dialog ref="drawer" class="drawer" aria-label="资产详情" @cancel.prevent="closeDrawer">
-    <AssetEditor v-if="editor" :asset="selected" :default-kind="newKind" :busy="saving" :error="drawerError"
-      @save="saveAsset" @cancel="selectedId ? openAsset(selectedId) : closeDrawer()" />
-    <template v-else-if="selected">
-      <div class="drawer-title">
-        <div><p class="eyebrow">{{ kinds[selected.kind].label }} · #{{ selected.id }}</p><h2>{{ selected.name }}</h2></div>
-        <button class="icon-button" aria-label="关闭详情" @click="closeDrawer"><X :size="20" /></button>
-      </div>
-      <div class="drawer-body">
-        <div class="detail-toolbar">
-          <span class="tag" :class="status(selected).tone"><span class="status-dot"></span>{{ status(selected).label }}</span>
-          <button v-if="editable" class="button small" @click="drawerError = ''; editor = true"><Pencil :size="14" /> 编辑</button>
-        </div>
-        <p v-if="drawerError" class="error" role="alert">{{ drawerError }}</p>
-        <dl class="detail-grid">
-          <div><dt>平台</dt><dd>{{ platform(selected) }}</dd></div>
-          <div><dt>负责人</dt><dd>{{ selected.owner || '—' }}</dd></div>
-          <div><dt>环境</dt><dd>{{ selected.environment || '—' }}</dd></div>
-          <div><dt>管理地址 / IP</dt><dd class="mono">{{ selected.address || '—' }}</dd></div>
-          <div v-if="selected.kind === 'host' || selected.kind === 'vm'"><dt>CPU / 内存</dt><dd>{{ selected.cpu || '—' }} 核 · {{ selected.memoryMiB ? selected.memoryMiB / 1024 + ' GiB' : '—' }}</dd></div>
-          <div v-if="selectedLocation"><dt>数据中心位置</dt>
-            <dd><button type="button" class="text-button" @click="showAssetLocation(selectedLocation)">{{ locationLabel(selectedLocation) }}</button></dd>
-            <dd v-if="selectedLocation.placement.assetId !== selected.id" class="muted">随 {{ byId.get(selectedLocation.placement.assetId)?.name }} 定位</dd>
-          </div>
-        </dl>
+          <a-alert v-if="error" type="error" :message="error" show-icon closable class="page-alert" @close="error = ''" />
+
+          <a-row v-if="page === 'overview'" :gutter="[16, 16]" class="metric-row">
+            <a-col v-for="metric in metrics" :key="metric.label" :xs="24" :sm="12">
+              <a-card hoverable class="metric-card" @click="goTo(metric.target)">
+                <component :is="metric.icon" class="metric-icon" />
+                <a-statistic :title="metric.label" :value="metric.count" />
+                <div class="metric-hint">{{ metric.hint }}</div>
+              </a-card>
+            </a-col>
+          </a-row>
+
+          <a-card v-if="page === 'changes'" :bordered="false" title="变更记录">
+            <ChangeList :changes="changes" @open="openAsset" />
+          </a-card>
+
+          <FacilityView v-else-if="page === 'facilities'" :layout="facilities" :assets="assets" :links="links"
+            :editable="editable" :focus="facilityFocus" :reload="refresh" @open-asset="openAsset" @session-error="report" />
+
+          <IpamView v-else-if="page === 'ipam'" :editable="editable" @session-error="report" />
+
+          <a-card v-else :bordered="false">
+            <template #title>
+              <a-space>
+                <span>{{ page === 'overview' ? '资源台账' : '资源列表' }}</span>
+                <a-tag>{{ filtered.length }} 条</a-tag>
+              </a-space>
+            </template>
+            <template #extra>
+              <a-space wrap>
+                <a-upload :show-upload-list="false" accept=".csv,text/csv" :before-upload="handleImportUpload">
+                  <a-button :loading="importing"><UploadOutlined /> 导入 CSV</a-button>
+                </a-upload>
+                <a-button @click="downloadTemplate"><DownloadOutlined /> 下载模板</a-button>
+                <a-button :disabled="!filtered.length" @click="exportCSV"><DownloadOutlined /> 导出 CSV</a-button>
+              </a-space>
+            </template>
+
+            <div class="table-toolbar">
+              <a-input v-model:value="keyword" allow-clear placeholder="搜索名称、IP、宿主机…" class="table-search">
+                <template #prefix><SearchOutlined /></template>
+              </a-input>
+              <a-space wrap>
+                <a-select v-if="page === 'overview'" v-model:value="kindFilter" allow-clear placeholder="全部类型" style="width: 132px">
+                  <a-select-option v-for="(type, key) in kinds" :key="key" :value="key">{{ type.label }}</a-select-option>
+                </a-select>
+                <a-select v-model:value="platformFilter" allow-clear placeholder="全部平台" style="width: 145px">
+                  <a-select-option value="pve">Proxmox VE</a-select-option>
+                  <a-select-option value="kvm">KVM</a-select-option>
+                </a-select>
+                <a-select v-model:value="lifecycleFilter" style="width: 135px">
+                  <a-select-option value="active">在册</a-select-option>
+                  <a-select-option value="retired">已退役</a-select-option>
+                  <a-select-option value="">全部生命周期</a-select-option>
+                </a-select>
+              </a-space>
+            </div>
+
+            <a-table :columns="assetColumns" :data-source="filtered" row-key="id" :loading="busy"
+              :pagination="tablePagination" :scroll="{ x: 900 }" size="middle" :locale="{ emptyText: '暂无匹配资源' }">
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'name'">
+                  <a-button type="link" class="asset-link" @click="openAsset(record.id)">
+                    <component :is="kinds[record.kind as Kind].icon" />
+                    <span>{{ record.name }}</span>
+                    <span v-if="record.environment" class="asset-sub">{{ record.environment }}</span>
+                  </a-button>
+                </template>
+                <template v-else-if="column.key === 'kind'">{{ kinds[record.kind as Kind].label }}</template>
+                <template v-else-if="column.key === 'status'">
+                  <a-tag :color="status(record as Asset).tone">{{ status(record as Asset).label }}</a-tag>
+                </template>
+                <template v-else-if="column.key === 'meta'">{{ page === 'vm' ? hostName(record as Asset) : platform(record as Asset) }}</template>
+                <template v-else-if="column.key === 'address'"><span class="mono">{{ record.address || '—' }}</span></template>
+                <template v-else-if="column.key === 'owner'">{{ record.owner || '—' }}</template>
+                <template v-else-if="column.key === 'actions'">
+                  <a-button type="link" size="small" @click="openAsset(record.id)">查看</a-button>
+                </template>
+              </template>
+            </a-table>
+          </a-card>
+        </a-layout-content>
+      </a-layout>
+    </a-layout>
+
+    <a-drawer v-model:open="drawerOpen" :width="560" :title="drawerTitle" destroy-on-close @close="closeDrawer">
+      <AssetEditor v-if="editor" :asset="selected" :default-kind="newKind" :busy="saving" :error="drawerError"
+        @save="saveAsset" @cancel="selectedId ? openAsset(selectedId) : closeDrawer()" />
+      <template v-else-if="selected">
+        <a-space class="detail-tags">
+          <a-tag :color="status(selected).tone">{{ status(selected).label }}</a-tag>
+          <a-tag>{{ kinds[selected.kind].label }}</a-tag>
+        </a-space>
+        <a-alert v-if="drawerError" type="error" :message="drawerError" show-icon class="drawer-alert" />
+        <a-button v-if="editable" type="primary" class="drawer-edit" @click="drawerError = ''; editor = true">
+          <EditOutlined /> 编辑
+        </a-button>
+
+        <a-descriptions :column="1" bordered size="small" class="detail-descriptions">
+          <a-descriptions-item label="平台">{{ platform(selected) }}</a-descriptions-item>
+          <a-descriptions-item label="负责人">{{ selected.owner || '—' }}</a-descriptions-item>
+          <a-descriptions-item label="环境">{{ selected.environment || '—' }}</a-descriptions-item>
+          <a-descriptions-item label="管理地址 / IP"><span class="mono">{{ selected.address || '—' }}</span></a-descriptions-item>
+          <a-descriptions-item v-if="selected.kind === 'host' || selected.kind === 'vm'" label="CPU / 内存">
+            {{ selected.cpu || '—' }} 核 · {{ selected.memoryMiB ? selected.memoryMiB / 1024 + ' GiB' : '—' }}
+          </a-descriptions-item>
+          <a-descriptions-item v-if="selectedLocation" label="数据中心位置">
+            <a-button type="link" class="inline-link" @click="showAssetLocation(selectedLocation)">
+              {{ locationLabel(selectedLocation) }}
+            </a-button>
+            <div v-if="selectedLocation.placement.assetId !== selected.id" class="muted">
+              随 {{ byId.get(selectedLocation.placement.assetId)?.name }} 定位
+            </div>
+          </a-descriptions-item>
+        </a-descriptions>
+
         <p v-if="selected.notes" class="detail-notes">{{ selected.notes }}</p>
 
-        <section class="detail-section">
-          <div class="detail-heading"><h3><Link2 :size="17" /> 资源关系</h3>
-            <button v-if="editable && relationOptions.length" class="button small" @click="startRelation"><Plus :size="15" /> 添加</button>
-          </div>
-          <form v-if="showRelationForm" class="link-form" @submit.prevent="updateLink()">
-            <select v-model="relationChoice" aria-label="关系类型"><option v-for="option in relationOptions" :key="option.id" :value="option.id">{{ option.label }}</option></select>
-            <select v-model.number="relationTarget" aria-label="关系目标"><option :value="0">选择资源</option><option v-for="target in targets" :key="target.id" :value="target.id">{{ target.name }}</option></select>
-            <button type="submit" class="button primary small" :disabled="saving || !relationTarget">保存关系</button>
-            <button type="button" class="icon-button" aria-label="取消添加关系" @click="showRelationForm = false"><X :size="16" /></button>
-          </form>
-          <p v-if="!related.length" class="muted">暂无关联资源</p>
-          <div v-for="link in related" :key="link.id" class="relation-row">
-            <span class="tag gray">{{ relationLabel(link) }}</span>
-            <button class="text-button" @click="openAsset(relatedId(link))">{{ byId.get(relatedId(link))?.name }}</button>
-            <button v-if="editable" class="text-button muted relation-action" :disabled="saving" @click="updateLink(link.id)">解除</button>
-          </div>
-        </section>
+        <a-divider orientation="left">资源关系</a-divider>
+        <a-button v-if="editable && relationOptions.length" size="small" @click="startRelation"><PlusOutlined /> 添加</a-button>
+        <a-form v-if="showRelationForm" layout="inline" class="relation-form" @submit.prevent="updateLink()">
+          <a-form-item>
+            <a-select v-model:value="relationChoice" style="width: 150px" placeholder="关系类型">
+              <a-select-option v-for="option in relationOptions" :key="option.id" :value="option.id">{{ option.label }}</a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item>
+            <a-select v-model:value="relationTarget" style="width: 170px" placeholder="选择资源">
+              <a-select-option v-for="target in targets" :key="target.id" :value="target.id">{{ target.name }}</a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-space>
+            <a-button type="primary" html-type="submit" size="small" :disabled="saving || !relationTarget">保存</a-button>
+            <a-button size="small" @click="showRelationForm = false">取消</a-button>
+          </a-space>
+        </a-form>
+        <a-empty v-if="!related.length" description="暂无关联资源" />
+        <a-list v-else :data-source="related" size="small">
+          <template #renderItem="{ item }">
+            <a-list-item>
+              <a-space>
+                <a-tag>{{ relationLabel(item) }}</a-tag>
+                <a-button type="link" @click="openAsset(relatedId(item))">{{ byId.get(relatedId(item))?.name }}</a-button>
+              </a-space>
+              <a-button v-if="editable" type="link" danger @click="updateLink(item.id)">解除</a-button>
+            </a-list-item>
+          </template>
+        </a-list>
 
-        <section v-if="Object.keys(selected.attributes).length" class="detail-section">
-          <div class="detail-heading"><h3><HardDrive :size="17" /> 扩展信息</h3></div>
-          <dl class="attribute-list">
-            <div v-for="(value, key) in selected.attributes" :key="'a-' + key"><dt>{{ key }}</dt><dd>{{ typeof value === 'object' ? JSON.stringify(value) : value }}</dd></div>
-          </dl>
-        </section>
+        <template v-if="Object.keys(selected.attributes).length">
+          <a-divider orientation="left">扩展信息</a-divider>
+          <a-descriptions :column="1" size="small" bordered>
+            <a-descriptions-item v-for="(value, key) in selected.attributes" :key="key" :label="String(key)">
+              {{ typeof value === 'object' ? JSON.stringify(value) : value }}
+            </a-descriptions-item>
+          </a-descriptions>
+        </template>
 
-        <section class="detail-section">
-          <div class="detail-heading"><h3><History :size="17" /> 变更记录</h3></div>
-          <ChangeList :changes="assetChanges" hide-asset />
-        </section>
-      </div>
-    </template>
-  </dialog>
-  <div v-if="toast" class="toast" role="status"><ShieldCheck :size="17" /> {{ toast }}</div>
+        <a-divider orientation="left">变更记录</a-divider>
+        <ChangeList :changes="assetChanges" hide-asset />
+      </template>
+    </a-drawer>
+  </a-config-provider>
 </template>
