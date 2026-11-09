@@ -2,9 +2,9 @@
 
 [English](README.en.md)
 
-Easy CMDB 是一款简单易用的配置管理数据库，用于集中管理 IT 资产、基础设施配置和资产关系。项目面向中小规模、单机部署的运维场景：约 3000 台虚拟机，整体规模控制在 5000 台主机以内，少量运维人员即可维护。设计取舍是简单、够用、好维护：不引入额外中间件，也不追求大规模集群。当前支持物理机、虚拟机和交换机，提供资源详情、搜索筛选、CSV 导入导出、IPAM 网段与 IP 管理、操作审计以及数据中心机柜视图。
+Easy CMDB 是一款简单易用的配置管理数据库，用于集中管理 IT 资产、基础设施配置和资产关系。项目面向中小规模、单机部署的运维场景：约 3000 台虚拟机，整体规模控制在 5000 台主机以内，少量运维人员即可维护。设计取舍是简单、够用、好维护：不引入额外中间件，也不追求大规模集群。当前支持物理机、虚拟机和交换机，提供首页汇总仪表盘、资源详情、搜索筛选、CSV 导入导出、IPAM 网段与 IP 管理、操作审计以及数据中心机柜视图。
 
-项目采用 Go、Vue 3 + TypeScript、Ant Design Vue 和 SQLite。一个 Go 二进制、一份 `web/dist` 前端产物和一个 SQLite 文件即可运行，不需要单独部署数据库服务。当前版本使用 SQLite；后续如有需要，可以再扩展 MySQL 或 PostgreSQL 后端。
+项目采用 Go、React 19 + TypeScript、Ant Design 6、ECharts 和 SQLite。一个 Go 二进制、一份 `web/dist` 前端产物和一个 SQLite 文件即可运行，不需要单独部署数据库服务。当前版本使用 SQLite；后续如有需要，可以再扩展 MySQL 或 PostgreSQL 后端。
 
 ## 适用场景
 
@@ -135,7 +135,7 @@ cp easy.db easy-cmdb.db
 
 ## 开发
 
-首次构建前端后，可用 `npm --prefix web run dev` 启动前端开发服务，它会把 `/api` 请求代理到本机 8080 的 Go 服务。Go 服务可用 `go run ./cmd/easy` 启动。`go test ./...` 检查 Go 包，`npm --prefix web run check` 执行 Vue 类型检查。
+首次构建前端后，可用 `npm --prefix web run dev` 启动前端开发服务，它会把 `/api` 请求代理到本机 8080 的 Go 服务。Go 服务可用 `go run ./cmd/easy` 启动。`go test ./...` 检查 Go 包，`npm --prefix web run check` 执行 TypeScript 类型检查。
 
 表结构在 `internal/cmdb/schema.sql`，首次启动时自动执行。项目仍在开发阶段，修改表结构后删除本地 `easy.db` 并重启即可重建，不需要迁移文件。
 

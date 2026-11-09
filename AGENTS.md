@@ -8,12 +8,12 @@
 
 ## 项目概览
 
-Easy CMDB 用于集中管理企业 IT 资产、配置和资产关系，面向约 3000 台虚拟机、5000 台主机以内的单机场景。技术栈为 Go 1.26+、Vue 3 + TypeScript + Ant Design Vue 和 SQLite。开发和部署步骤见 [README.md](README.md)。
+Easy CMDB 用于集中管理企业 IT 资产、配置和资产关系，面向约 3000 台虚拟机、5000 台主机以内的单机场景。技术栈为 Go 1.26+、React 19 + TypeScript + Ant Design 6、ECharts 和 SQLite。开发和部署步骤见 [README.md](README.md)。
 
 ## 代码位置与改动范围
 
 - `cmd/easy/` 提供 `easy serve` 入口。`internal/config/` 读取 YAML 配置，`internal/cmdb/` 维护资产、IPAM、权限、审计、CSV 导入和数据库。自动采集功能已移除，现阶段以手工维护和 CSV 导入为主。
-- `web/src/` 是管理界面，`web/src/api.ts` 定义前端使用的接口类型。修改请求、响应或状态值时，检查 Go 接口和 Vue 调用方是否一致。
+- `web/src/` 是管理界面，`web/src/api.ts` 定义前端使用的接口类型。修改请求、响应或状态值时，检查 Go 接口和 React 调用方是否一致。
 - 优先复用现有模块，按当前任务做可独立验证的改动。部署或配置方式有变化时，同步中英文 README 和对应的示例配置。
 
 ## 数据库与资产维护

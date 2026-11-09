@@ -2,9 +2,9 @@
 
 [简体中文](README.md)
 
-Easy CMDB is a simple, easy-to-use configuration management database for IT assets, infrastructure configuration, and asset relationships. It targets small, single-node operations: around 3,000 virtual machines with a total footprint under 5,000 hosts, maintained by a small operations team. The design goal is simple, sufficient, and easy to maintain: no extra middleware and no large-cluster ambitions. It tracks physical hosts, virtual machines, and switches, with asset search, relationship views, CSV import and export, IPAM subnet and address management, access controls, change history, and data center/rack views.
+Easy CMDB is a simple, easy-to-use configuration management database for IT assets, infrastructure configuration, and asset relationships. It targets small, single-node operations: around 3,000 virtual machines with a total footprint under 5,000 hosts, maintained by a small operations team. The design goal is simple, sufficient, and easy to maintain: no extra middleware and no large-cluster ambitions. It tracks physical hosts, virtual machines, and switches, with a home dashboard, asset search, relationship views, CSV import and export, IPAM subnet and address management, access controls, change history, and data center/rack views.
 
-Easy CMDB uses Go, Vue 3 with TypeScript, Ant Design Vue, and SQLite. One Go binary, the built `web/dist` assets, and one SQLite file are all it needs; there is no separate database service to deploy. The current release uses SQLite, and a MySQL or PostgreSQL backend can be added later if needed.
+Easy CMDB uses Go, React 19 with TypeScript, Ant Design 6, ECharts, and SQLite. One Go binary, the built `web/dist` assets, and one SQLite file are all it needs; there is no separate database service to deploy. The current release uses SQLite, and a MySQL or PostgreSQL backend can be added later if needed.
 
 ## Scope
 
@@ -135,7 +135,7 @@ Verify a backup before relying on it. To restore, stop the service, replace the 
 
 ## Development
 
-After the first frontend build, `npm --prefix web run dev` starts the frontend development server and proxies `/api` to the Go service on port 8080. Run the Go service with `go run ./cmd/easy`. Run `go test ./...` for Go package checks and `npm --prefix web run check` for Vue type checking.
+After the first frontend build, `npm --prefix web run dev` starts the frontend development server and proxies `/api` to the Go service on port 8080. Run the Go service with `go run ./cmd/easy`. Run `go test ./...` for Go package checks and `npm --prefix web run check` for TypeScript type checking.
 
 The schema lives in `internal/cmdb/schema.sql` and is applied when an empty database starts for the first time. This project is still in development: after changing the schema, delete the local `easy.db` and restart to recreate it; there are no migration files.
 
