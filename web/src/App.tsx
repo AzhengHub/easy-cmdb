@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   Alert, App as AntApp, Button, Card, ConfigProvider, Descriptions,
@@ -26,21 +26,21 @@ import { IpamView } from './components/IpamView'
 
 const { Header, Sider, Content } = Layout
 
-type NavLeaf = { key: Page; label: string; icon: ReactNode; description: string }
+type NavLeaf = { key: Page; label: string; icon: ReactNode }
 type NavGroup = { key: string; label: string; icon: ReactNode; children: NavLeaf[] }
 
 const navigation: (NavLeaf | NavGroup)[] = [
-  { key: 'home', label: '首页', icon: <HomeOutlined />, description: '基础设施资产、虚拟化和 IPAM 总览。' },
-  { key: 'host', label: '物理机', icon: <CloudServerOutlined />, description: '维护物理硬件、计算节点和宿主机。' },
-  { key: 'vm', label: '虚拟机', icon: <DesktopOutlined />, description: '查询虚拟机配置、运行状态和所在宿主机。' },
-  { key: 'switch', label: '交换机', icon: <ApiOutlined />, description: '维护交换机、网络设备和相关地址。' },
-  { key: 'facilities', label: '数据中心', icon: <ApartmentOutlined />, description: '摆放机柜、管理设备 U 位，并在三维布局中定位资产。' },
-  { key: 'ipam', label: 'IPAM', icon: <GlobalOutlined />, description: '管理网段、已分配和空闲 IP 地址。' },
+  { key: 'home', label: '首页', icon: <HomeOutlined /> },
+  { key: 'host', label: '物理机', icon: <CloudServerOutlined /> },
+  { key: 'vm', label: '虚拟机', icon: <DesktopOutlined /> },
+  { key: 'switch', label: '交换机', icon: <ApiOutlined /> },
+  { key: 'facilities', label: '数据中心', icon: <ApartmentOutlined /> },
+  { key: 'ipam', label: 'IPAM', icon: <GlobalOutlined /> },
   {
     key: 'system', label: '系统管理', icon: <SettingOutlined />,
     children: [
-      { key: 'changes', label: '变更记录', icon: <HistoryOutlined />, description: '追溯人工修改和资源关系变化。' },
-      { key: 'password', label: '更改密码', icon: <LockOutlined />, description: '修改当前账号的登录密码。' },
+      { key: 'changes', label: '变更记录', icon: <HistoryOutlined /> },
+      { key: 'password', label: '更改密码', icon: <LockOutlined /> },
     ],
   },
 ]
@@ -643,7 +643,6 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
           <div className="page-header">
             <div>
               <h1>{activePage.label}</h1>
-              <p className="page-desc">{activePage.description}</p>
             </div>
             {(page === 'host' || page === 'vm' || page === 'switch') && editable && (
               <Button type="primary" onClick={startNew}><PlusOutlined /> 新增资产</Button>
@@ -813,3 +812,4 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
     </Layout>
   )
 }
+

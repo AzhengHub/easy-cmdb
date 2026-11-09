@@ -96,7 +96,6 @@ a { color: var(--primary); }
 .app-content { padding: 24px; min-height: calc(100vh - 56px); }
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
 .page-header h1 { font-size: 22px; font-weight: 600; line-height: 1.35; }
-.page-desc { margin-top: 4px; color: var(--muted); }
 .page-alert { margin-bottom: 16px; }
 .metric-row { margin-bottom: 16px; }
 .metric-card { cursor: pointer; height: 100%; }
