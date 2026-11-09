@@ -79,6 +79,40 @@ viewer:
 - Leaving both `operator` / `viewer` fields empty disables that account.
 - Accounts are created only on first start; changing `config.yaml` later does not change an existing account's password.
 
+## Deploy to a Linux server
+
+The server-side installer is `scripts/install.sh`. It installs a prebuilt `easy` binary and frontend `dist/`; it does not build them. A fresh clone cannot be installed directly on a server without Go/Node. A one-command release installer will be added when release packages are available.
+
+Build the Linux artifacts first:
+
+```bash
+npm --prefix web ci
+npm --prefix web run build
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o easy ./cmd/easy
+```
+
+Place these files together:
+
+```text
+install.sh
+easy
+dist/
+```
+
+Then run as root:
+
+```bash
+sudo APP_PORT=80 bash install.sh
+```
+
+The installer creates the `easy-cmdb` system account, installs under `/opt/easy-cmdb`, writes `config.yaml`, installs the embedded systemd unit, and starts the service. Port 80 is granted through `CAP_NET_BIND_SERVICE` while the service runs as a normal user. The first install prints the administrator password; repeat deployments preserve the existing configuration and database.
+
+To force a listen-port change on an existing installation:
+
+```bash
+sudo APP_PORT=80 UPDATE_LISTEN=1 bash install.sh
+```
+
 ## Asset management
 
 Add individual assets with the `新增资产` button. For larger inventories, use CSV import: edit the file in Excel and save it as `CSV UTF-8` (comma-separated), click `下载模板` on the asset list to get the template, fill it in, then click `导入 CSV`.

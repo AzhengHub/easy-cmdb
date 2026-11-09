@@ -79,6 +79,40 @@ viewer:
 - `operator` / `viewer` 两项都留空表示不创建该账号。
 - 账号只在首次启动时创建，之后修改 `config.yaml` 不会改变已有账号的密码。
 
+## 部署到 Linux 服务器
+
+服务器端安装脚本是 `scripts/install.sh`，用于安装预先构建好的 `easy` 和前端 `dist/`。脚本本身不负责编译；克隆后直接运行它不适用于没有 Go/Node 的目标服务器。等后续提供 release 安装包时，再补“下载即安装”的入口。
+
+先构建 Linux 产物：
+
+```bash
+npm --prefix web ci
+npm --prefix web run build
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o easy ./cmd/easy
+```
+
+把以下文件放在同一目录：
+
+```text
+install.sh
+easy
+dist/
+```
+
+然后以 root 运行：
+
+```bash
+sudo APP_PORT=80 bash install.sh
+```
+
+脚本会创建 `easy-cmdb` 系统账号、安装到 `/opt/easy-cmdb`、生成 `config.yaml`、写入 systemd 服务并启动。80 端口通过 `CAP_NET_BIND_SERVICE` 授权给普通服务账号，不需要整个服务跑 root。首次安装会打印管理员密码；重复部署会保留已有配置和数据库。
+
+已有配置需要强制调整监听端口时：
+
+```bash
+sudo APP_PORT=80 UPDATE_LISTEN=1 bash install.sh
+```
+
 ## 资产维护
 
 零散资产可以直接在页面点击「新增资产」手工维护。资产较多时使用 CSV 批量导入：在 Excel 中编辑后另存为「CSV UTF-8」（逗号分隔），在资源列表点击「下载模板」，填写后点击「导入 CSV」。
