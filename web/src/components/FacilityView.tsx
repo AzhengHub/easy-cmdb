@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Alert, Button, Card, Empty, Form, Input, InputNumber, List,
   Popconfirm, Select, Space,
@@ -8,8 +8,9 @@ import {
 } from '@ant-design/icons'
 import { api, APIError } from '../api'
 import type { Asset, Link } from '../api'
-import { assetLocations, isMountKind, locationLabel, mountKinds, uRange } from '../facilities'
+import { assetLocations, isMountKind, locationLabel, mountKinds } from '../facilities'
 import type { AssetLocation, Facilities, MountKind, Placement, Rack, RackFields, Room, RoomFields } from '../facilities'
+import { RackDetailDrawer } from './RackDetailDrawer'
 import { RoomScene } from './RoomScene'
 
 interface Props {
@@ -50,7 +51,7 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
   const [feedback, setFeedback] = useState('')
   const [search, setSearch] = useState('')
   const [dragRack, setDragRack] = useState<number | null>(null)
-  const elevation = useRef<HTMLDivElement>(null)
+  const [rackDrawerOpen, setRackDrawerOpen] = useState(false)
 
   const rooms = layout.rooms
   const room = rooms.find(item => item.id === roomId)
@@ -59,7 +60,6 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
   const rackIds = useMemo(() => new Set(racks.map(item => item.id)), [racks])
   const roomPlacements = useMemo(() => layout.placements.filter(item => rackIds.has(item.rackId)), [layout.placements, rackIds])
   const devices = roomPlacements.filter(item => item.rackId === rackId)
-  const usedU = devices.reduce((used, item) => used + item.units, 0)
   const byId = useMemo(() => new Map(assets.map(asset => [asset.id, asset])), [assets])
   const locations = useMemo(() => assetLocations(layout, links), [layout, links])
   const mounted = useMemo(() => new Map(layout.placements.map(placement => [placement.assetId, placement])), [layout.placements])
@@ -83,7 +83,6 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
       return { key, row, column, rack: byCell.get(key) }
     })
   }, [room, racks])
-  const rackUnits = Array.from({ length: rack?.heightU ?? 0 }, (_, index) => rack!.heightU - index)
   const mountLocation = mountDraft?.assetId ? locations.get(mountDraft.assetId) : undefined
 
   useEffect(() => {
@@ -98,20 +97,6 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
     if (focus) showLocation(focus)
   }, [focus])
 
-  useEffect(() => {
-    if (!focused) return
-    const timer = window.setTimeout(() => {
-      const device = elevation.current?.querySelector<HTMLElement>('[data-asset-id="' + focused + '"]')
-      if (!device || !elevation.current) return
-      const viewport = elevation.current.getBoundingClientRect()
-      const bounds = device.getBoundingClientRect()
-      if (bounds.top < viewport.top || bounds.bottom > viewport.bottom) {
-        elevation.current.scrollTop += bounds.top - viewport.top - viewport.height / 3
-      }
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [focused, rackId])
-
   function resetForms() {
     setRoomDraft(null)
     setRackDraft(null)
@@ -123,6 +108,7 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
   function selectRoom(id: number) {
     if (id === roomId) return
     resetForms()
+    setRackDrawerOpen(false)
     setRoomId(id)
     setRackId(layout.racks.find(item => item.roomId === id)?.id ?? null)
     setFocused(null)
@@ -135,8 +121,20 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
     setFocused(null)
   }
 
+  function openRack(id: number) {
+    selectRack(id)
+    setRackDrawerOpen(true)
+  }
+
+  function closeRackDrawer() {
+    setRackDrawerOpen(false)
+    setMountDraft(null)
+    setFeedback('')
+  }
+
   function showLocation(location: AssetLocation) {
     resetForms()
+    setRackDrawerOpen(false)
     setRoomId(location.room.id)
     setRackId(location.rack.id)
     setFocused(location.placement.assetId)
@@ -303,14 +301,64 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
     }, '设备已下架')
   }
 
-  function nameOf(assetId: number) {
-    return byId.get(assetId)?.name ?? '资产 #' + assetId
+  function moveDevice(value: Placement, startU: number) {
+    if (!rack) return
+    void mutate(() => api<Placement>('/assets/' + value.assetId + '/placement', 'PUT', {
+      rackId: rack.id, startU, units: value.units, version: value.version,
+    }), placed => setFocused(placed.assetId), '设备位置已更新')
   }
 
-  function deviceRow(item: Placement) {
-    const height = rack?.heightU ?? 1
-    return (height - item.startU - item.units + 2) + ' / span ' + item.units
-  }
+  const mountForm = rack && mountDraft ? (
+    <Form layout="inline" className="facility-form mount-form" onFinish={saveMount}>
+      <Form.Item label="录入方式">
+        <Select
+          style={{ width: 150 }} value={mountDraft.mode}
+          onChange={mode => changeMountMode({ ...mountDraft, mode })}
+          options={[{ value: 'existing', label: '关联已有资产' }, { value: 'new', label: '新建资产并上架' }]}
+        />
+      </Form.Item>
+      {mountDraft.mode === 'existing' ? (
+        <>
+          <Form.Item label="选择设备">
+            <Select
+              style={{ width: 250 }} value={mountDraft.assetId}
+              onChange={assetId => changeDevice({ ...mountDraft, assetId })}
+              options={[
+                { value: 0, label: '请选择资产' },
+                ...candidates.map(asset => ({
+                  value: asset.id,
+                  label: `${asset.name} · ${mountKinds[asset.kind as MountKind]} #${asset.id}${mounted.has(asset.id) ? ' · 已上架' : ''}`,
+                })),
+              ]}
+            />
+          </Form.Item>
+          {mountLocation && <Form.Item label="当前位置">{locationLabel(mountLocation)}</Form.Item>}
+        </>
+      ) : (
+        <>
+          <Form.Item label="设备类型">
+            <Select
+              style={{ width: 110 }} value={mountDraft.kind}
+              onChange={kind => changeMountMode({ ...mountDraft, kind })}
+              options={Object.entries(mountKinds).map(([value, label]) => ({ value, label }))}
+            />
+          </Form.Item>
+          <Form.Item label="设备名称"><Input value={mountDraft.name} maxLength={160} onChange={event => setMountDraft({ ...mountDraft, name: event.target.value })} /></Form.Item>
+          <Form.Item label="管理地址 / IP"><Input value={mountDraft.address} maxLength={160} onChange={event => setMountDraft({ ...mountDraft, address: event.target.value })} /></Form.Item>
+        </>
+      )}
+      <Form.Item label="起始 U 位"><InputNumber min={1} max={rack.heightU} value={mountDraft.startU} onChange={value => setMountDraft({ ...mountDraft, startU: value ?? 1 })} /></Form.Item>
+      <Form.Item label="占用 U 数"><InputNumber min={1} max={rack.heightU} value={mountDraft.units} onChange={value => setMountDraft({ ...mountDraft, units: value ?? 1 })} /></Form.Item>
+      <Form.Item>
+        <Space>
+          <Button type="primary" htmlType="submit" loading={busy} disabled={mountDraft.mode === 'existing' && !mountDraft.assetId}>
+            {mountDraft.mode === 'existing' && mountDraft.version ? '保存位置' : '保存上架'}
+          </Button>
+          <Button onClick={() => setMountDraft(null)}>取消</Button>
+        </Space>
+      </Form.Item>
+    </Form>
+  ) : null
 
   return (
     <div className="facilities">
@@ -424,7 +472,7 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
                 <Space>
                   <span className="muted">机柜</span>
                   <Select
-                    style={{ width: 140 }} value={rackId ?? undefined} disabled={busy} onChange={selectRack}
+                    style={{ width: 140 }} value={rackId ?? undefined} disabled={busy} onChange={openRack}
                     options={racks.map(item => ({ value: item.id, label: item.name }))}
                   />
                 </Space>
@@ -444,7 +492,7 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
                       {cell.rack ? (
                         <button
                           className="rack-tile" type="button" aria-pressed={cell.rack.id === rackId}
-                          draggable={editable && !busy} onClick={() => selectRack(cell.rack!.id)}
+                          draggable={editable && !busy} onClick={() => openRack(cell.rack!.id)}
                           onDragStart={event => startDrag(event, cell.rack!)} onDragEnd={() => setDragRack(null)}
                         >
                           <CloudServerOutlined />
@@ -455,126 +503,29 @@ export function FacilityView({ layout, assets, links, editable, dark, focus, rel
                     </div>
                   ))}
                 </div>
-                {editable && racks.length > 0 && <p className="floor-hint muted">拖动机柜到空格，也可以通过编辑机柜设置坐标和朝向。</p>}
+                {editable && racks.length > 0 && <p className="floor-hint muted">拖动机柜到空格；点击机柜打开机柜视图，拖动设备调整 U 位。</p>}
               </div>
             ) : (
               <RoomScene
                 room={room} racks={racks} placements={roomPlacements} assets={byId}
                 selectedRack={rackId} selectedAsset={focused} dark={dark}
-                onRack={selectRack} onDevice={openSceneDevice}
+                onRack={openRack} onDevice={openSceneDevice}
               />
             )}
           </Card>
 
-          <Card
-            variant="borderless" className="rack-panel"
-            title={rack ? <Space wrap><span>{rack.name} · 机柜正视图</span><span className="muted">已用 {usedU} / {rack.heightU}U · 剩余 {rack.heightU - usedU}U</span></Space> : null}
-            extra={editable && rack ? (
-              <Space>
-                <Button size="small" disabled={busy} onClick={() => editRack(rack)}>编辑机柜</Button>
-                <Button size="small" type="primary" disabled={busy || usedU === rack.heightU} onClick={() => editMount()}><PlusOutlined /> 上架设备</Button>
-              </Space>
-            ) : null}
-          >
-            {rack ? (
-              <>
-                {mountDraft && (
-                  <Form layout="inline" className="facility-form mount-form" onFinish={saveMount}>
-                    <Form.Item label="录入方式">
-                      <Select
-                        style={{ width: 150 }} value={mountDraft.mode}
-                        onChange={mode => changeMountMode({ ...mountDraft, mode })}
-                        options={[{ value: 'existing', label: '关联已有资产' }, { value: 'new', label: '新建资产并上架' }]}
-                      />
-                    </Form.Item>
-                    {mountDraft.mode === 'existing' ? (
-                      <>
-                        <Form.Item label="选择设备">
-                          <Select
-                            style={{ width: 250 }} value={mountDraft.assetId}
-                            onChange={assetId => changeDevice({ ...mountDraft, assetId })}
-                            options={[
-                              { value: 0, label: '请选择资产' },
-                              ...candidates.map(asset => ({
-                                value: asset.id,
-                                label: `${asset.name} · ${mountKinds[asset.kind as MountKind]} #${asset.id}${mounted.has(asset.id) ? ' · 已上架' : ''}`,
-                              })),
-                            ]}
-                          />
-                        </Form.Item>
-                        {mountLocation && <Form.Item label="当前位置">{locationLabel(mountLocation)}</Form.Item>}
-                      </>
-                    ) : (
-                      <>
-                        <Form.Item label="设备类型">
-                          <Select
-                            style={{ width: 110 }} value={mountDraft.kind}
-                            onChange={kind => changeMountMode({ ...mountDraft, kind })}
-                            options={Object.entries(mountKinds).map(([value, label]) => ({ value, label }))}
-                          />
-                        </Form.Item>
-                        <Form.Item label="设备名称"><Input value={mountDraft.name} maxLength={160} onChange={event => setMountDraft({ ...mountDraft, name: event.target.value })} /></Form.Item>
-                        <Form.Item label="管理地址 / IP"><Input value={mountDraft.address} maxLength={160} onChange={event => setMountDraft({ ...mountDraft, address: event.target.value })} /></Form.Item>
-                      </>
-                    )}
-                    <Form.Item label="起始 U 位"><InputNumber min={1} max={rack.heightU} value={mountDraft.startU} onChange={value => setMountDraft({ ...mountDraft, startU: value ?? 1 })} /></Form.Item>
-                    <Form.Item label="占用 U 数"><InputNumber min={1} max={rack.heightU} value={mountDraft.units} onChange={value => setMountDraft({ ...mountDraft, units: value ?? 1 })} /></Form.Item>
-                    <Form.Item>
-                      <Space>
-                        <Button type="primary" htmlType="submit" loading={busy} disabled={mountDraft.mode === 'existing' && !mountDraft.assetId}>
-                          {mountDraft.mode === 'existing' && mountDraft.version ? '保存位置' : '保存上架'}
-                        </Button>
-                        <Button onClick={() => setMountDraft(null)}>取消</Button>
-                      </Space>
-                    </Form.Item>
-                  </Form>
-                )}
-
-                <div ref={elevation} className="elevation-scroll">
-                  <div className="elevation-grid" style={{ gridTemplateRows: `repeat(${rack.heightU}, 22px)` }}>
-                    {rackUnits.map((unit, index) => (
-                      <span key={unit} className="u-label muted" style={{ gridRow: index + 1 }}>U{unit}</span>
-                    ))}
-                    {rackUnits.map((unit, index) => (
-                      <div key={`slot-${unit}`} className="u-slot" style={{ gridRow: index + 1 }} />
-                    ))}
-                    {devices.map(device => (
-                      <button
-                        key={device.assetId} type="button" className={`u-device ${byId.get(device.assetId)?.kind ?? ''}`}
-                        data-asset-id={device.assetId} data-focused={focused === device.assetId}
-                        style={{ gridRow: deviceRow(device) }} onClick={() => onOpenAsset(device.assetId)}
-                      >
-                        <strong>{nameOf(device.assetId)}</strong><span>{uRange(device)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {devices.length > 0 && (
-                  <List
-                    className="rack-devices" size="small" dataSource={devices}
-                    renderItem={item => (
-                      <List.Item
-                        actions={editable ? [
-                          byId.get(item.assetId)?.lifecycle === 'active' && <Button key="edit" size="small" disabled={busy} onClick={() => editMount(item)}>调整</Button>,
-                          <Popconfirm key="remove" title="下架该设备？资产台账会保留。" okText="下架" cancelText="取消" onConfirm={() => unmountDevice(item)}>
-                            <Button size="small" danger disabled={busy}>下架</Button>
-                          </Popconfirm>,
-                        ] : []}
-                      >
-                        <Space>
-                          <Button type="link" onClick={() => onOpenAsset(item.assetId)}>{nameOf(item.assetId)}</Button>
-                          <span className="muted">{uRange(item)}</span>
-                        </Space>
-                      </List.Item>
-                    )}
-                  />
-                )}
-              </>
-            ) : <Empty description="请选择机柜" />}
-          </Card>
         </div>
       )}
+      <RackDetailDrawer
+        open={rackDrawerOpen} rack={rack ?? null} room={room ?? null}
+        devices={devices} assets={byId} editable={editable} busy={busy}
+        focused={focused} feedback={feedback} error={error} mountForm={mountForm}
+        onClose={closeRackDrawer} onOpenAsset={onOpenAsset}
+        onEditRack={value => { setRackDrawerOpen(false); editRack(value) }}
+        onMount={() => editMount()}
+        onEditPlacement={value => editMount(value)}
+        onUnmount={unmountDevice} onMove={moveDevice}
+      />
     </div>
   )
 }
