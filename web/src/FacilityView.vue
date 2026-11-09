@@ -175,12 +175,12 @@ function saveRoom() {
   void mutate(() => api<Room>(id ? '/rooms/' + id : '/rooms', id ? 'PUT' : 'POST', fields), saved => {
     selectRoom(saved.id)
     roomDraft.value = null
-  }, '机房已保存')
+  }, '数据中心已保存')
 }
 
 function removeRoom(value: Room) {
-  if (!window.confirm('删除空机房「' + value.name + '」？')) return
-  void mutate(() => api('/rooms/' + value.id + '?version=' + value.version, 'DELETE'), resetForms, '机房已删除')
+  if (!window.confirm('删除空数据中心「' + value.name + '」？')) return
+  void mutate(() => api('/rooms/' + value.id + '?version=' + value.version, 'DELETE'), resetForms, '数据中心已删除')
 }
 
 function editRack(value?: Rack) {
@@ -188,7 +188,7 @@ function editRack(value?: Rack) {
   const free = cells.value.find(cell => !cell.rack)
   if (value) rackDraft.value = { ...value }
   else if (free) rackDraft.value = { name: '', heightU: 42, column: free.column, row: free.row, rotation: 0, version: 0 }
-  else error.value = '机房网格已占满，请先扩大布局'
+  else error.value = '数据中心网格已占满，请先扩大布局'
 }
 
 function saveRack() {
@@ -317,16 +317,16 @@ function deviceRow(item: Placement) {
     <div class="panel facility-controls">
       <div class="facility-bar">
         <label class="room-picker">
-          <span>机房</span>
+          <span>数据中心</span>
           <select :value="roomId ?? ''" :disabled="!rooms.length || busy" @change="selectRoom(Number(($event.target as HTMLSelectElement).value))">
-            <option v-if="!rooms.length" value="">暂无机房</option>
+            <option v-if="!rooms.length" value="">暂无数据中心</option>
             <option v-for="item in rooms" :key="item.id" :value="item.id">{{ item.name }}</option>
           </select>
         </label>
-        <label v-if="rooms.length" class="search location-search"><Search :size="16" /><input v-model="search" aria-label="定位资产" placeholder="搜索已上架资产、机房或机柜…" /></label>
+        <label v-if="rooms.length" class="search location-search"><Search :size="16" /><input v-model="search" aria-label="定位资产" placeholder="搜索已上架资产、数据中心或机柜…" /></label>
         <div v-if="editable" class="facility-actions">
-          <button type="button" class="button primary" :disabled="busy" @click="editRoom()"><Plus :size="16" /> 新增机房</button>
-          <button v-if="room" type="button" class="button" :disabled="busy" @click="editRoom(room)">编辑机房</button>
+          <button type="button" class="button primary" :disabled="busy" @click="editRoom()"><Plus :size="16" /> 新增数据中心</button>
+          <button v-if="room" type="button" class="button" :disabled="busy" @click="editRoom(room)">编辑数据中心</button>
         </div>
       </div>
       <div v-if="search.trim()" class="location-results" aria-label="资产定位结果">
@@ -336,14 +336,14 @@ function deviceRow(item: Placement) {
         <p v-if="!searchResults.length" class="muted">暂无匹配的上架位置</p>
       </div>
 
-      <form v-if="roomDraft" class="facility-form" aria-label="机房配置" @submit.prevent="saveRoom">
-        <label class="facility-wide">机房名称<input v-model.trim="roomDraft.name" placeholder="例如：北京机房" maxlength="160" required /></label>
+      <form v-if="roomDraft" class="facility-form" aria-label="数据中心配置" @submit.prevent="saveRoom">
+        <label class="facility-wide">数据中心名称<input v-model.trim="roomDraft.name" placeholder="例如：北京数据中心" maxlength="160" required /></label>
         <label>列数<input v-model.number="roomDraft.columns" type="number" min="1" max="24" required /></label>
         <label>行数<input v-model.number="roomDraft.rows" type="number" min="1" max="24" required /></label>
         <div class="facility-actions">
-          <button class="button primary" :disabled="busy">保存机房</button>
+          <button class="button primary" :disabled="busy">保存数据中心</button>
           <button type="button" class="button" @click="roomDraft = null">取消</button>
-          <button v-if="roomDraft.id && room?.id === roomDraft.id && !racks.length" type="button" class="button" :disabled="busy" @click="removeRoom(room)">删除空机房</button>
+          <button v-if="roomDraft.id && room?.id === roomDraft.id && !racks.length" type="button" class="button" :disabled="busy" @click="removeRoom(room)">删除空数据中心</button>
         </div>
       </form>
     </div>
@@ -352,8 +352,8 @@ function deviceRow(item: Placement) {
     <p v-if="feedback" class="facility-feedback" role="status">{{ feedback }}</p>
 
     <div v-if="!room" class="panel empty-state">
-      <MapPin :size="27" /><h3>暂无机房</h3>
-      <p>{{ editable ? '新增一个机房，就可以开始摆放机柜。' : '机房录入后会显示在这里。' }}</p>
+      <MapPin :size="27" /><h3>暂无数据中心</h3>
+      <p>{{ editable ? '新增一个数据中心，就可以开始摆放机柜。' : '数据中心录入后会显示在这里。' }}</p>
     </div>
 
     <div v-else class="facility-workspace">

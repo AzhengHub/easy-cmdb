@@ -2,7 +2,7 @@
 
 [简体中文](README.md)
 
-Easy CMDB is a simple, easy-to-use configuration management database for IT assets, infrastructure configuration, and business relationships. It targets small, single-node operations: around 3,000 virtual machines with a total footprint under 5,000 hosts, maintained by a small operations team. The design goal is simple, sufficient, and easy to maintain: no extra middleware and no large-cluster ambitions. It tracks physical hosts, virtual machines, switches, and business services, with asset search, relationship views, CSV import and export, access controls, change history, and room/rack views.
+Easy CMDB is a simple, easy-to-use configuration management database for IT assets, infrastructure configuration, and business relationships. It targets small, single-node operations: around 3,000 virtual machines with a total footprint under 5,000 hosts, maintained by a small operations team. The design goal is simple, sufficient, and easy to maintain: no extra middleware and no large-cluster ambitions. It tracks physical hosts, virtual machines, switches, and business services, with asset search, relationship views, CSV import and export, access controls, change history, and data center/rack views.
 
 Easy CMDB uses Go, Vue 3 with TypeScript, and SQLite. One Go binary, the built `web/dist` assets, and one SQLite file are all it needs; there is no separate database service to deploy. The current release uses SQLite, and a MySQL or PostgreSQL backend can be added later if needed.
 
@@ -11,7 +11,7 @@ Easy CMDB uses Go, Vue 3 with TypeScript, and SQLite. One Go binary, the built `
 - Around 3,000 virtual machines with a total footprint under 5,000 hosts on a single node.
 - A small operations team with read-heavy usage.
 - No database service to operate; a backup is a single database file.
-- Manual maintenance and spreadsheet import as the primary workflow, with asset relationships, room/rack views, and change history.
+- Manual maintenance and spreadsheet import as the primary workflow, with asset relationships, data center/rack views, and change history.
 
 It is not designed for multi-node concurrent writes, large multi-tenant deployments, or high-frequency concurrent editing.
 
@@ -104,13 +104,13 @@ Import rules:
 
 Exported CSV files use the same columns and can be used as a reference when preparing an import.
 
-## Room layouts
+## Data center layouts
 
-Open the room view (`机房视图`), create a named room with a grid size, and add racks with a label, height, grid position, and orientation. Drag racks to vacant cells in the floor plan or edit their coordinates directly. The 3D overview supports rotation, zoom, rack selection, and opening device details.
+Open the data center view (`数据中心`), create a named data center with a grid size, and add racks with a label, height, grid position, and orientation. Drag racks to vacant cells in the floor plan or edit their coordinates directly. The 3D overview supports rotation, zoom, rack selection, and opening device details.
 
-Use the rack elevation to mount an existing asset or create and mount a physical host or switch in one step. Set the starting rack unit and device height. Easy CMDB validates overlaps and rack boundaries. Asset details link back to the room and rack, and virtual machines follow their host relationship. Unmounting a device keeps its asset record.
+Use the rack elevation to mount an existing asset or create and mount a physical host or switch in one step. Set the starting rack unit and device height. Easy CMDB validates overlaps and rack boundaries. Asset details link back to the data center and rack, and virtual machines follow their host relationship. Unmounting a device keeps its asset record.
 
-Racks occupy grid cells in the room layout. The floor plan, rack elevation, and 3D overview share the same placement data. Room, rack, and placement changes appear in change history.
+Racks occupy grid cells in the data center layout. The floor plan, rack elevation, and 3D overview share the same placement data. Data center, rack, and placement changes appear in change history.
 
 ## Back up and restore
 

@@ -249,7 +249,7 @@ onMounted(() => {
     return
   }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
-  renderer.domElement.setAttribute('aria-label', '机房三维布局')
+  renderer.domElement.setAttribute('aria-label', '数据中心三维布局')
   mount.value.append(renderer.domElement)
   controls = new OrbitControls(camera, renderer.domElement)
   controls.maxPolarAngle = Math.PI / 2 - .06

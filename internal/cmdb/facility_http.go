@@ -51,11 +51,11 @@ func (s *Server) saveRoom(w http.ResponseWriter, r *http.Request) {
 	}
 	input.Name = strings.TrimSpace(input.Name)
 	if input.Name == "" || utf8.RuneCountInString(input.Name) > 160 {
-		fail(w, http.StatusBadRequest, "机房名称须为 1–160 个字符")
+		fail(w, http.StatusBadRequest, "数据中心名称须为 1–160 个字符")
 		return
 	}
 	if !validCell(input.Columns, input.Rows) {
-		fail(w, http.StatusBadRequest, "机房网格的行数和列数须为 1–24")
+		fail(w, http.StatusBadRequest, "数据中心网格的行数和列数须为 1–24")
 		return
 	}
 	room, err := SaveRoom(r.Context(), s.db, id, input.RoomFields, input.Version, currentUser(r).Username)

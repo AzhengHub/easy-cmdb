@@ -8,7 +8,7 @@ const emit = defineEmits<{ open: [id: number] }>()
 const actionLabels: Record<string, string> = {
   create: '创建', update: '编辑', discover: '自动发现', sync: '配置同步', move: '宿主机变更',
   missing: '连续未发现', link: '关联资源', unlink: '解除关系',
-  room_create: '新增机房', room_update: '编辑机房', room_delete: '删除机房',
+  room_create: '新增数据中心', room_update: '编辑数据中心', room_delete: '删除数据中心',
   rack_create: '新增机柜', rack_update: '编辑机柜', rack_delete: '删除机柜',
   mount: '设备上架', relocate: '上架位置变更', unmount: '设备下架',
 }
@@ -16,7 +16,7 @@ const fieldLabels: Record<string, string> = {
   name: '名称', status: '状态', lifecycle: '生命周期', platform: '平台', owner: '负责人',
   environment: '环境', address: '地址', cpu: 'CPU', memoryMiB: '内存（MiB）', notes: '备注',
   attributes: '扩展属性', observed: '采集信息', missingCount: '缺失次数',
-  columns: '机房列数', rows: '机房行数', heightU: '机柜高度（U）', column: '机柜所在列', row: '机柜所在行', rotation: '朝向',
+  columns: '数据中心列数', rows: '数据中心行数', heightU: '机柜高度（U）', column: '机柜所在列', row: '机柜所在行', rotation: '朝向',
 }
 const relationLabels: Record<string, string> = { hosts: '承载', uses: '使用资源' }
 

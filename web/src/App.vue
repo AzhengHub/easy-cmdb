@@ -19,7 +19,7 @@ const navigation = [
   { id: 'overview', title: '资源总览', icon: LayoutGrid, description: '查看物理资源、虚拟化平台和业务归属。' },
   { id: 'host', title: '物理机', icon: Server, description: '维护物理硬件、计算节点和宿主机。' },
   { id: 'vm', title: '虚拟机', icon: Monitor, description: '查询虚拟机配置、运行状态和所在宿主机。' },
-  { id: 'facilities', title: '机房视图', icon: MapPin, description: '摆放机柜、管理设备 U 位，并在三维布局中定位资产。' },
+  { id: 'facilities', title: '数据中心', icon: MapPin, description: '摆放机柜、管理设备 U 位，并在三维布局中定位资产。' },
   { id: 'business', title: '业务管理', icon: Network, description: '维护业务负责人、环境和关联资源。' },
   { id: 'changes', title: '变更记录', icon: History, description: '追溯人工修改和资源关系变化。' },
 ] as const
@@ -563,7 +563,7 @@ async function importCSV(event: Event) {
           <div><dt>环境</dt><dd>{{ selected.environment || '—' }}</dd></div>
           <div><dt>管理地址 / IP</dt><dd class="mono">{{ selected.address || '—' }}</dd></div>
           <div v-if="selected.kind === 'host' || selected.kind === 'vm'"><dt>CPU / 内存</dt><dd>{{ selected.cpu || '—' }} 核 · {{ selected.memoryMiB ? selected.memoryMiB / 1024 + ' GiB' : '—' }}</dd></div>
-          <div v-if="selectedLocation"><dt>机房位置</dt>
+          <div v-if="selectedLocation"><dt>数据中心位置</dt>
             <dd><button type="button" class="text-button" @click="showAssetLocation(selectedLocation)">{{ locationLabel(selectedLocation) }}</button></dd>
             <dd v-if="selectedLocation.placement.assetId !== selected.id" class="muted">随 {{ byId.get(selectedLocation.placement.assetId)?.name }} 定位</dd>
           </div>

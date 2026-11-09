@@ -166,7 +166,7 @@ func SaveRoom(ctx context.Context, db *sql.DB, id int64, fields RoomFields, vers
 			version=version+1 WHERE id=$1 RETURNING `+roomColumns, id, fields.Name, fields.Columns, fields.Rows))
 	}
 	if err != nil {
-		return Room{}, facilityUniqueError(err, "机房名称已存在")
+		return Room{}, facilityUniqueError(err, "数据中心名称已存在")
 	}
 	if err := writeFacilityChange(ctx, tx, room.Name, actor, "room", before.ID, before.RoomFields, room.RoomFields); err != nil {
 		return Room{}, err
@@ -200,7 +200,7 @@ func SaveRack(ctx context.Context, db *sql.DB, id, roomID int64, fields RackFiel
 		return Rack{}, err
 	}
 	if fields.Column > room.Columns || fields.Row > room.Rows {
-		return Rack{}, invalidFacility("机柜位置超出机房网格")
+		return Rack{}, invalidFacility("机柜位置超出数据中心网格")
 	}
 
 	var rack Rack
@@ -225,7 +225,7 @@ func SaveRack(ctx context.Context, db *sql.DB, id, roomID int64, fields RackFiel
 			id, fields.Name, fields.HeightU, fields.Column, fields.Row, fields.Rotation))
 	}
 	if err != nil {
-		return Rack{}, facilityUniqueError(err, "该机房已使用此机柜名称或布局位置")
+		return Rack{}, facilityUniqueError(err, "该数据中心已使用此机柜名称或布局位置")
 	}
 	if err := writeFacilityChange(ctx, tx, room.Name+" / "+rack.Name, actor, "rack", before.ID, before.RackFields, rack.RackFields); err != nil {
 		return Rack{}, err
@@ -255,7 +255,7 @@ func DeleteRoom(ctx context.Context, db *sql.DB, id int64, version int, actor st
 		return ErrConflict
 	}
 	if _, err := tx.ExecContext(ctx, "DELETE FROM rooms WHERE id=$1", id); err != nil {
-		return facilityDeleteError(err, "请先清空机房中的机柜")
+		return facilityDeleteError(err, "请先清空数据中心中的机柜")
 	}
 	if err := writeNamedChange(ctx, tx, nil, room.Name, actor, "room_delete", room.RoomFields, nil); err != nil {
 		return err
