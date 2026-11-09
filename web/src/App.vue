@@ -14,20 +14,18 @@ import type { AssetLocation, Facilities } from './facilities'
 
 const FacilityView = defineAsyncComponent(() => import('./FacilityView.vue'))
 
-type Page = 'overview' | 'host' | 'vm' | 'business' | 'changes' | 'facilities'
+type Page = 'overview' | 'host' | 'vm' | 'changes' | 'facilities'
 const navigation = [
-  { id: 'overview', title: '资源总览', icon: LayoutGrid, description: '查看物理资源、虚拟化平台和业务归属。' },
+  { id: 'overview', title: '资源总览', icon: LayoutGrid, description: '查看物理资源和虚拟化资源。' },
   { id: 'host', title: '物理机', icon: Server, description: '维护物理硬件、计算节点和宿主机。' },
   { id: 'vm', title: '虚拟机', icon: Monitor, description: '查询虚拟机配置、运行状态和所在宿主机。' },
   { id: 'facilities', title: '数据中心', icon: MapPin, description: '摆放机柜、管理设备 U 位，并在三维布局中定位资产。' },
-  { id: 'business', title: '业务管理', icon: Network, description: '维护业务负责人、环境和关联资源。' },
   { id: 'changes', title: '变更记录', icon: History, description: '追溯人工修改和资源关系变化。' },
 ] as const
 
 const kinds = {
   host: { label: '物理机', icon: Server },
   vm: { label: '虚拟机', icon: Monitor },
-  business: { label: '业务', icon: Network },
   switch: { label: '交换机', icon: Network },
 }
 const statuses: Record<string, { label: string; tone: string }> = {
@@ -40,7 +38,6 @@ const statuses: Record<string, { label: string; tone: string }> = {
 }
 const relations: { kind: LinkKind; from: Kind; to: Kind[]; outgoing: string; incoming: string }[] = [
   { kind: 'hosts', from: 'host', to: ['vm'], outgoing: '承载虚拟机', incoming: '所在宿主机' },
-  { kind: 'uses', from: 'business', to: ['host', 'vm'], outgoing: '使用资源', incoming: '所属业务' },
 ]
 
 const user = ref<User | null>(null)
@@ -89,7 +86,7 @@ const related = computed(() => links.value.filter(l => l.fromId === selectedId.v
 const vmRelations = computed(() => {
   const data = new Map<number, string[]>()
   for (const link of links.value) {
-    if (link.kind === 'hosts' || link.kind === 'uses') {
+    if (link.kind === 'hosts') {
       const names = data.get(link.toId) ?? []
       names.push(link.fromName)
       data.set(link.toId, names)
@@ -102,8 +99,6 @@ const metrics = computed(() => [
     hint: '独立主机与虚拟化节点' },
   { label: '虚拟机', count: activeAssets.value.filter(a => a.kind === 'vm').length, icon: Monitor, target: 'vm', tone: 'violet',
     hint: activeAssets.value.filter(a => a.kind === 'vm' && a.status === 'running').length + ' 台运行中' },
-  { label: '业务', count: activeAssets.value.filter(a => a.kind === 'business').length, icon: Network, target: 'business', tone: 'amber',
-    hint: '业务与资源归属' },
 ] as const)
 
 const scope = computed(() => assets.value.filter(asset => {
@@ -286,7 +281,7 @@ async function openAsset(id: number) {
 }
 function startNew() {
   selectedId.value = null
-  newKind.value = page.value === 'vm' || page.value === 'business' ? page.value : 'host'
+  newKind.value = page.value === 'vm' ? 'vm' : 'host'
   editor.value = true
   drawerError.value = ''
   displayDrawer()
@@ -407,7 +402,7 @@ async function importCSV(event: Event) {
       <div class="login-brand"><span class="brand-mark"><Radio :size="24" /></span> Easy CMDB</div>
       <p class="eyebrow login-kicker">INFRASTRUCTURE INVENTORY</p>
       <h1>登录资源管理台</h1>
-      <p class="muted">统一管理基础设施、虚拟机与业务关系。</p>
+      <p class="muted">统一管理基础设施和虚拟机资源。</p>
       <form class="login-form" @submit.prevent="login">
         <p v-if="error" class="error" role="alert">{{ error }}</p>
         <label>账号<input v-model="loginForm.username" autocomplete="username" required maxlength="80" /></label>
@@ -498,11 +493,11 @@ async function importCSV(event: Event) {
             <input ref="importInput" type="file" accept=".csv,text/csv" hidden @change="importCSV" />
           </div>
           <div class="filters">
-            <label class="search"><Search :size="17" /><input v-model="keyword" aria-label="搜索资源" placeholder="搜索名称、IP、业务、宿主机…" /></label>
+            <label class="search"><Search :size="17" /><input v-model="keyword" aria-label="搜索资源" placeholder="搜索名称、IP、宿主机…" /></label>
             <select v-if="page === 'overview'" v-model="kindFilter" aria-label="资源类型">
               <option value="">全部类型</option><option v-for="(type, key) in kinds" :key="key" :value="key">{{ type.label }}</option>
             </select>
-            <select v-if="page !== 'business'" v-model="platformFilter" aria-label="平台">
+            <select v-model="platformFilter" aria-label="平台">
               <option value="">全部平台</option><option value="pve">Proxmox VE</option><option value="kvm">KVM</option>
             </select>
             <select v-model="lifecycleFilter" aria-label="生命周期">

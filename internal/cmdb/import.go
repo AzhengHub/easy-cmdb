@@ -48,7 +48,6 @@ var importHeaderAliases = map[string]string{
 var importKinds = map[string]string{
 	"host": "host", "物理机": "host", "主机": "host", "宿主机": "host",
 	"vm": "vm", "虚拟机": "vm",
-	"business": "business", "业务": "business",
 	"switch": "switch", "交换机": "switch",
 }
 
@@ -211,7 +210,7 @@ func decodeImportRow(record []string, columns map[string]int, rowNumber int) (Fi
 	rawKind := value("kind")
 	kind, ok := importKinds[strings.ToLower(rawKind)]
 	if !ok {
-		return Fields{}, importRowError(rowNumber, "资源类型 %q 无效，可用：物理机、虚拟机、业务、交换机", rawKind)
+		return Fields{}, importRowError(rowNumber, "资源类型 %q 无效，可用：物理机、虚拟机、交换机", rawKind)
 	}
 	name := value("name")
 	if name == "" {
@@ -266,7 +265,7 @@ func decodeImportRow(record []string, columns map[string]int, rowNumber int) (Fi
 		attributes = "{}"
 	}
 	if !json.Valid([]byte(attributes)) || !strings.HasPrefix(attributes, "{") {
-		return Fields{}, importRowError(rowNumber, "扩展属性须为 JSON 对象，例如 {\"业务\":\"示例\"}")
+		return Fields{}, importRowError(rowNumber, "扩展属性须为 JSON 对象，例如 {\"位置\":\"A01\"}")
 	}
 
 	fields := Fields{

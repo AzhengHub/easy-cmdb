@@ -193,7 +193,7 @@ func TestImportAssets(t *testing.T) {
 	if err := writer.Write(header); err != nil {
 		t.Fatal(err)
 	}
-	if err := writer.Write([]string{"lab-vm-01", "虚拟机", "KVM", "运行中", "在册", "192.0.2.10", "4", "8192", "运维组", "测试", "导入测试", `{"业务":"示例"}`}); err != nil {
+	if err := writer.Write([]string{"lab-vm-01", "虚拟机", "KVM", "运行中", "在册", "192.0.2.10", "4", "8192", "运维组", "测试", "导入测试", `{"位置":"A01"}`}); err != nil {
 		t.Fatal(err)
 	}
 	if err := writer.Write([]string{"lab-host-01", "物理机", "", "在线", "在册", "192.0.2.11", "16", "65536", "", "", "", ""}); err != nil {
@@ -222,7 +222,7 @@ func TestImportAssets(t *testing.T) {
 	if vm.Kind != "vm" || vm.Platform != "kvm" || vm.Status != "running" || vm.CPU != 4 || vm.MemoryMiB != 8192 {
 		t.Fatalf("unexpected imported vm: %+v", vm)
 	}
-	if string(vm.Attributes) != `{"业务":"示例"}` {
+	if string(vm.Attributes) != `{"位置":"A01"}` {
 		t.Fatalf("attributes = %s", vm.Attributes)
 	}
 

@@ -113,7 +113,7 @@ func validateFields(fields *Fields) error {
 	fields.Environment = strings.TrimSpace(fields.Environment)
 
 	switch fields.Kind {
-	case "host", "vm", "business", "switch":
+	case "host", "vm", "switch":
 	default:
 		return errors.New("请选择资源类型")
 	}

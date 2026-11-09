@@ -6,7 +6,7 @@
 
 CREATE TABLE assets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind TEXT NOT NULL CHECK (kind IN ('host','vm','business','switch')),
+    kind TEXT NOT NULL CHECK (kind IN ('host','vm','switch')),
     name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 160),
     platform TEXT NOT NULL DEFAULT '' CHECK (platform IN ('','pve','kvm')),
     status TEXT NOT NULL DEFAULT 'unknown' CHECK (status IN ('unknown','online','offline','running','stopped','paused')),
@@ -35,7 +35,7 @@ CREATE TABLE asset_links (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     from_id INTEGER NOT NULL REFERENCES assets,
     to_id INTEGER NOT NULL REFERENCES assets,
-    kind TEXT NOT NULL CHECK (kind IN ('hosts','uses')),
+    kind TEXT NOT NULL CHECK (kind IN ('hosts')),
     source_key TEXT,
     UNIQUE (from_id, to_id, kind),
     CHECK (from_id <> to_id)

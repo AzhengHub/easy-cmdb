@@ -2,7 +2,7 @@
 
 [简体中文](README.md)
 
-Easy CMDB is a simple, easy-to-use configuration management database for IT assets, infrastructure configuration, and business relationships. It targets small, single-node operations: around 3,000 virtual machines with a total footprint under 5,000 hosts, maintained by a small operations team. The design goal is simple, sufficient, and easy to maintain: no extra middleware and no large-cluster ambitions. It tracks physical hosts, virtual machines, switches, and business services, with asset search, relationship views, CSV import and export, access controls, change history, and data center/rack views.
+Easy CMDB is a simple, easy-to-use configuration management database for IT assets, infrastructure configuration, and asset relationships. It targets small, single-node operations: around 3,000 virtual machines with a total footprint under 5,000 hosts, maintained by a small operations team. The design goal is simple, sufficient, and easy to maintain: no extra middleware and no large-cluster ambitions. It tracks physical hosts, virtual machines, and switches, with asset search, relationship views, CSV import and export, access controls, change history, and data center/rack views.
 
 Easy CMDB uses Go, Vue 3 with TypeScript, and SQLite. One Go binary, the built `web/dist` assets, and one SQLite file are all it needs; there is no separate database service to deploy. The current release uses SQLite, and a MySQL or PostgreSQL backend can be added later if needed.
 
@@ -87,11 +87,11 @@ Template columns:
 资源名称,类型,平台,状态,生命周期,地址 / IP,CPU,内存 MiB,负责人,环境,备注,扩展属性
 ```
 
-- Type: `host`, `vm`, `business`, `switch`, or the Chinese labels 物理机, 虚拟机, 业务, 交换机.
+- Type: `host`, `vm`, `switch`, or the Chinese labels 物理机, 虚拟机, 交换机.
 - Platform: `pve`, `kvm`, `Proxmox VE`, `KVM`, or empty.
 - Status: `unknown`, `online`, `offline`, `running`, `stopped`, `paused`, or the Chinese labels 未知, 在线, 离线, 运行中, 已停止, 已暂停.
 - Lifecycle: `active`, `retired`, 在册, 已退役; empty defaults to active.
-- Attributes: a JSON object such as `{"业务":"示例"}`; empty becomes `{}`.
+- Attributes: a JSON object such as `{"位置":"A01"}`; empty becomes `{}`.
 - CPU and memory MiB must be non-negative integers.
 
 Import rules:

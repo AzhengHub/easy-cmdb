@@ -278,8 +278,6 @@ func ValidLink(kind, from, to string) bool {
 	switch kind {
 	case "hosts":
 		return from == "host" && to == "vm"
-	case "uses":
-		return from == "business" && (to == "host" || to == "vm")
 	default:
 		return false
 	}
