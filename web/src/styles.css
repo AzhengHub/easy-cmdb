@@ -175,6 +175,22 @@ html[data-theme="dark"] .change-field ins { color: #73d13d; }
 .location-result { display: flex; justify-content: space-between; text-align: left; gap: 8px; flex-wrap: wrap; }
 .facility-form { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
 .rack-form, .mount-form { border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+.facility-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; align-items: start; }
+.facility-sidebar { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.facility-sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.facility-sidebar-title { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--text); font-size: 13px; }
+.facility-sidebar-title > span { color: var(--muted); font-size: 11px; }
+.facility-tree { position: relative; display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
+.facility-tree::before { content: ""; position: absolute; top: 8px; bottom: 8px; left: 16px; border-left: 1px dashed var(--line); }
+.facility-tree-item { position: relative; display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0; padding: 8px 7px 8px 25px; border: 0; border-radius: 5px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.facility-tree-item > .anticon { position: relative; z-index: 1; flex: 0 0 auto; padding: 2px; background: var(--surface); color: var(--muted); font-size: 13px; }
+.facility-tree-item:hover { background: var(--hover); }
+.facility-tree-item.active { background: var(--selected); color: var(--primary); }
+.facility-tree-item.active > .anticon { background: var(--selected); color: var(--primary); }
+.facility-tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.facility-tree-count { flex: 0 0 auto; margin-left: auto; color: var(--muted); font-size: 10px; }
+.facility-tree-empty { padding: 10px 8px 8px 25px; color: var(--muted); font-size: 11px; }
+.facility-main { min-width: 0; }
 .facility-workspace { display: block; }
 .floor-toolbar { display: flex; justify-content: space-between; gap: 7px; flex-wrap: wrap; align-items: center; padding: 8px 0 12px; border-bottom: 1px solid var(--line); }
 .floor-scroll { overflow-x: auto; padding: 12px 0 0; background: var(--floor-bg); }

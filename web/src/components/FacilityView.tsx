@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Alert, Button, Card, Empty, Form, Input, InputNumber, List, Modal, Progress,
+  Alert, Button, Card, Dropdown, Empty, Form, Input, InputNumber, List, Modal, Progress,
   Popconfirm, Select, Space,
 } from 'antd'
 import {
-  AppstoreOutlined, CloudServerOutlined, ClusterOutlined, PieChartOutlined, PlusOutlined, SearchOutlined, TableOutlined,
+  ApartmentOutlined, AppstoreOutlined, CloudServerOutlined, ClusterOutlined, EditOutlined,
+  MoreOutlined, PieChartOutlined, PlusOutlined, SearchOutlined, TableOutlined,
 } from '@ant-design/icons'
 import { api, APIError } from '../api'
 import type { Asset, Link } from '../api'
@@ -52,6 +53,7 @@ export function FacilityView({ roomId, onRoomChange, layout, assets, links, edit
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
   const [search, setSearch] = useState('')
+  const [roomSearch, setRoomSearch] = useState('')
   const [rackKeyword, setRackKeyword] = useState('')
   const [dragRack, setDragRack] = useState<number | null>(null)
   const [rackDrawerOpen, setRackDrawerOpen] = useState(false)
@@ -59,6 +61,10 @@ export function FacilityView({ roomId, onRoomChange, layout, assets, links, edit
   const rooms = layout.rooms
   const activeRoomId = roomId ?? rooms[0]?.id ?? null
   const room = rooms.find(item => item.id === activeRoomId)
+  const sortedRooms = useMemo(() => rooms.slice().sort((left, right) => left.name.localeCompare(right.name, 'zh-CN')), [rooms])
+  const filteredRooms = roomSearch.trim()
+    ? sortedRooms.filter(item => item.name.toLowerCase().includes(roomSearch.trim().toLowerCase()))
+    : sortedRooms
   const racks = useMemo(() => layout.racks.filter(item => item.roomId === activeRoomId), [layout.racks, activeRoomId])
   const rack = racks.find(item => item.id === rackId)
   const rackIds = useMemo(() => new Set(racks.map(item => item.id)), [racks])
@@ -372,6 +378,57 @@ export function FacilityView({ roomId, onRoomChange, layout, assets, links, edit
 
   return (
     <div className="facilities">
+      <div className="facility-layout">
+        <aside className="facility-sidebar">
+          <div className="facility-sidebar-head">
+            <div className="facility-sidebar-title">
+              <ApartmentOutlined />
+              <strong>数据中心</strong>
+              <span>{rooms.length}</span>
+            </div>
+            {editable && (
+              <Dropdown
+                trigger={['click']}
+                menu={{
+                  items: [
+                    { key: 'add', label: '新增数据中心', icon: <PlusOutlined /> },
+                    { key: 'edit', label: '编辑当前数据中心', icon: <EditOutlined />, disabled: !room },
+                  ],
+                  onClick: ({ key }) => {
+                    if (key === 'add') editRoom()
+                    if (key === 'edit' && room) editRoom(room)
+                  },
+                }}
+              >
+                <Button type="text" size="small" icon={<MoreOutlined />} aria-label="数据中心操作" />
+              </Dropdown>
+            )}
+          </div>
+          <Input
+            allowClear prefix={<SearchOutlined />} placeholder="搜索数据中心"
+            value={roomSearch} onChange={event => setRoomSearch(event.target.value)}
+          />
+          <div className="facility-tree">
+            {filteredRooms.map(item => {
+              const count = layout.racks.filter(rack => rack.roomId === item.id).length
+              return (
+                <button
+                  key={item.id} type="button"
+                  className={`facility-tree-item${item.id === activeRoomId ? ' active' : ''}`}
+                  title={`${item.name} · ${count} 台机柜`}
+                  onClick={() => selectRoom(item.id)}
+                >
+                  <ClusterOutlined />
+                  <span className="facility-tree-name">{item.name}</span>
+                  <span className="facility-tree-count">{count}</span>
+                </button>
+              )
+            })}
+            {!filteredRooms.length && <div className="facility-tree-empty">暂无匹配的数据中心</div>}
+          </div>
+        </aside>
+
+        <div className="facility-main">
       {error && <Alert type="error" showIcon message={error} />}
       {feedback && <Alert type="success" showIcon message={feedback} />}
 
@@ -402,13 +459,7 @@ export function FacilityView({ roomId, onRoomChange, layout, assets, links, edit
           <Card
             variant="borderless" className="floor-panel"
             title={<Space wrap><span>{room.name}</span><span className="muted">{room.columns} 列 × {room.rows} 行 · {racks.length} 台机柜</span></Space>}
-            extra={editable ? (
-              <Space wrap>
-                <Button size="small" disabled={busy} onClick={() => editRoom()}>新增数据中心</Button>
-                <Button size="small" disabled={busy} onClick={() => editRoom(room)}>编辑数据中心</Button>
-                <Button size="small" type="primary" disabled={busy} onClick={() => editRack()}><PlusOutlined /> 新增机柜</Button>
-              </Space>
-            ) : null}
+            extra={editable ? <Button size="small" type="primary" disabled={busy} onClick={() => editRack()}><PlusOutlined /> 新增机柜</Button> : null}
           >
             {rackDraft && (
               <Form layout="inline" className="facility-form rack-form" onFinish={saveRack}>
@@ -523,6 +574,8 @@ export function FacilityView({ roomId, onRoomChange, layout, assets, links, edit
 
         </div>
       )}
+        </div>
+      </div>
       <Modal
         open={!!roomDraft} title={roomDraft?.id ? '编辑数据中心' : '新增数据中心'}
         footer={null} width={520} destroyOnHidden
