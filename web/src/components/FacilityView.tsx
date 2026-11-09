@@ -458,7 +458,7 @@ export function FacilityView({ roomId, onRoomChange, layout, assets, links, edit
 
           <Card
             variant="borderless" className="floor-panel"
-            title={<Space wrap><span>{room.name}</span><span className="muted">{room.columns} 列 × {room.rows} 行 · {racks.length} 台机柜</span></Space>}
+            title={<span>{room.name}</span>}
             extra={editable ? <Button size="small" type="primary" disabled={busy} onClick={() => editRack()}><PlusOutlined /> 新增机柜</Button> : null}
           >
             {rackDraft && (
@@ -592,14 +592,6 @@ export function FacilityView({ roomId, onRoomChange, layout, assets, links, edit
                 onChange={event => setRoomDraft({ ...roomDraft, name: event.target.value })}
               />
             </Form.Item>
-            <Space size="large">
-              <Form.Item label="列数">
-                <InputNumber min={1} max={24} value={roomDraft.columns} onChange={value => setRoomDraft({ ...roomDraft, columns: value ?? 1 })} />
-              </Form.Item>
-              <Form.Item label="行数">
-                <InputNumber min={1} max={24} value={roomDraft.rows} onChange={value => setRoomDraft({ ...roomDraft, rows: value ?? 1 })} />
-              </Form.Item>
-            </Space>
             <div className="room-modal-actions">
               <Space>
                 <Button type="primary" htmlType="submit" loading={busy}>保存数据中心</Button>

@@ -162,7 +162,7 @@ Add a subnet with its CIDR, gateway, and VLAN under `IPAM`. Addresses found in a
 
 ## Data center layouts
 
-Open the data center view (`数据中心`), create a named data center with a grid size, and add racks with a label, height, grid position, and orientation. Drag racks to vacant cells in the floor plan or edit their coordinates directly. The 3D overview supports rotation, zoom, rack selection, and opening device details.
+Open the data center view (`数据中心`), create a named data center (a default grid is used), and add racks with a label, height, grid position, and orientation. Drag racks to vacant cells in the floor plan or edit their coordinates directly. The 3D overview supports rotation, zoom, rack selection, and opening device details.
 
 Use the rack elevation to mount an existing asset or create and mount a physical host or switch in one step. Set the starting rack unit and device height. Easy CMDB validates overlaps and rack boundaries. Asset details link back to the data center and rack, and virtual machines follow their host relationship. Unmounting a device keeps its asset record.
 
