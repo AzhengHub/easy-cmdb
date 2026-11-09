@@ -35,6 +35,7 @@ func NewServer(db *sql.DB, secureCookie bool, frontend http.Handler) http.Handle
 	mux.HandleFunc("GET /api/captcha", s.issueCaptcha)
 	mux.HandleFunc("POST /api/login", s.signIn)
 	mux.HandleFunc("POST /api/logout", s.requireUser(false, s.signOut))
+	mux.HandleFunc("POST /api/me/password", s.requireUser(false, s.changeOwnPassword))
 	mux.HandleFunc("GET /api/me", s.requireUser(false, func(w http.ResponseWriter, r *http.Request) {
 		respond(w, http.StatusOK, currentUser(r))
 	}))

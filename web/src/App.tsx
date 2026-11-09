@@ -9,8 +9,8 @@ import type { TableColumnsType } from 'antd'
 import {
   ApartmentOutlined, ApiOutlined, CloudServerOutlined, DatabaseOutlined,
   DesktopOutlined, DownloadOutlined, EditOutlined, GlobalOutlined, HistoryOutlined,
-  HomeOutlined, LogoutOutlined, MenuOutlined, MoonOutlined, PlusOutlined, ReloadOutlined,
-  SearchOutlined, SunOutlined, UploadOutlined, UserOutlined,
+  HomeOutlined, LockOutlined, LogoutOutlined, MenuOutlined, MoonOutlined, PlusOutlined, ReloadOutlined,
+  SearchOutlined, SettingOutlined, SunOutlined, UploadOutlined, UserOutlined,
 } from '@ant-design/icons'
 import { api, apiCSV, APIError } from './api'
 import type { Asset, AssetFields, Captcha, Change, Kind, Link, LinkKind, Subnet, User } from './api'
@@ -19,21 +19,33 @@ import type { AssetLocation, Facilities } from './facilities'
 import type { Page } from './types'
 import { AssetEditor } from './components/AssetEditor'
 import { ChangeList } from './components/ChangeList'
+import { ChangePassword } from './components/ChangePassword'
 import { Dashboard } from './components/Dashboard'
 import { FacilityView } from './components/FacilityView'
 import { IpamView } from './components/IpamView'
 
 const { Header, Sider, Content } = Layout
 
-const navigation = [
+type NavLeaf = { key: Page; label: string; icon: ReactNode; description: string }
+type NavGroup = { key: string; label: string; icon: ReactNode; children: NavLeaf[] }
+
+const navigation: (NavLeaf | NavGroup)[] = [
   { key: 'home', label: '首页', icon: <HomeOutlined />, description: '基础设施资产、虚拟化和 IPAM 总览。' },
   { key: 'host', label: '物理机', icon: <CloudServerOutlined />, description: '维护物理硬件、计算节点和宿主机。' },
   { key: 'vm', label: '虚拟机', icon: <DesktopOutlined />, description: '查询虚拟机配置、运行状态和所在宿主机。' },
   { key: 'switch', label: '交换机', icon: <ApiOutlined />, description: '维护交换机、网络设备和相关地址。' },
   { key: 'facilities', label: '数据中心', icon: <ApartmentOutlined />, description: '摆放机柜、管理设备 U 位，并在三维布局中定位资产。' },
   { key: 'ipam', label: 'IPAM', icon: <GlobalOutlined />, description: '管理网段、已分配和空闲 IP 地址。' },
-  { key: 'changes', label: '变更记录', icon: <HistoryOutlined />, description: '追溯人工修改和资源关系变化。' },
-] as const
+  {
+    key: 'system', label: '系统管理', icon: <SettingOutlined />,
+    children: [
+      { key: 'changes', label: '变更记录', icon: <HistoryOutlined />, description: '追溯人工修改和资源关系变化。' },
+      { key: 'password', label: '更改密码', icon: <LockOutlined />, description: '修改当前账号的登录密码。' },
+    ],
+  },
+]
+const navLeaves = navigation.flatMap(item => 'children' in item ? item.children : [item])
+
 
 const kinds: Record<Kind, { label: string; icon: ReactNode }> = {
   host: { label: '物理机', icon: <CloudServerOutlined /> },
@@ -159,7 +171,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   const [relationTarget, setRelationTarget] = useState(0)
   const [facilityFocus, setFacilityFocus] = useState<AssetLocation | null>(null)
 
-  const activePage = navigation.find(item => item.key === page)!
+  const activePage = navLeaves.find(item => item.key === page)!
   const editable = user?.role !== 'viewer'
   const byId = useMemo(() => new Map(assets.map(asset => [asset.id, asset])), [assets])
   const locations = useMemo(() => assetLocations(facilities, links), [facilities, links])
@@ -178,7 +190,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   }, [links])
 
   const scoped = useMemo(() => {
-    if (page === 'home' || page === 'changes' || page === 'facilities' || page === 'ipam') return []
+    if (page === 'home' || page === 'changes' || page === 'password' || page === 'facilities' || page === 'ipam') return []
     return assets.filter(asset => asset.kind === page)
   }, [assets, page])
   const filtered = useMemo(() => {
@@ -318,6 +330,19 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
     } catch (e) {
       handleError(e)
     }
+  }
+
+  async function changePassword(currentPassword: string, newPassword: string) {
+    await api('/me/password', 'POST', { currentPassword, newPassword })
+    void message.success('密码已修改，请使用新密码重新登录')
+    closeDrawer()
+    setUser(null)
+    setAssets([])
+    setLinks([])
+    setChanges([])
+    setFacilities({ rooms: [], racks: [], placements: [] })
+    setSubnets([])
+    setPage('home')
   }
 
   function goTo(next: Page) {
@@ -582,9 +607,14 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
           <span>Easy CMDB</span>
         </div>
         <Menu
-          className="app-menu" mode="inline" selectedKeys={[page]}
-          items={navigation.map(item => ({ key: item.key, icon: item.icon, label: item.label }))}
-          onClick={({ key }) => goTo(key as Page)}
+          className="app-menu" mode="inline" selectedKeys={[page]} defaultOpenKeys={['system']}
+          items={navigation.map(item => 'children' in item
+            ? {
+                key: item.key, icon: item.icon, label: item.label,
+                children: item.children.map(child => ({ key: child.key, icon: child.icon, label: child.label })),
+              }
+            : { key: item.key, icon: item.icon, label: item.label })}
+          onClick={({ key }) => { if (key !== 'system') goTo(key as Page) }}
         />
       </Sider>
 
@@ -632,6 +662,8 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
           {page === 'changes' && (
             <Card variant="borderless" title="变更记录"><ChangeList changes={changes} onOpen={id => void openAsset(id)} /></Card>
           )}
+
+          {page === 'password' && <ChangePassword onSubmit={changePassword} />}
 
           {page === 'facilities' && (
             <FacilityView

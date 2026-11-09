@@ -119,6 +119,9 @@ a { color: var(--primary); }
 .detail-notes { margin-top: 16px; padding: 12px; border-radius: 6px; background: var(--subtle); color: var(--text); white-space: pre-wrap; }
 .inline-link { height: auto; padding: 0; }
 .relation-form { margin: 12px 0; }
+.password-card { max-width: 560px; }
+.password-hint { margin-bottom: 16px; }
+.password-alert { margin-bottom: 16px; }
 .ant-empty { margin-block: 16px; }
 
 /* change timeline */

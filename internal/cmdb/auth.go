@@ -52,15 +52,68 @@ func EnsureUser(ctx context.Context, db *sql.DB, username, password, role string
 	if exists {
 		return nil
 	}
-	salt := make([]byte, 16)
-	rand.Read(salt)
-	key, err := pbkdf2.Key(sha256.New, password, salt, passwordIterations, 32)
+	value, err := hashPassword(password)
 	if err != nil {
 		return err
 	}
-	value := base64.RawStdEncoding.EncodeToString(append(salt, key...))
 	_, err = db.ExecContext(ctx, "INSERT INTO users (username,password_hash,role) VALUES ($1,$2,$3)", username, value, role)
 	return err
+}
+
+func hashPassword(password string) (string, error) {
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return "", err
+	}
+	key, err := pbkdf2.Key(sha256.New, password, salt, passwordIterations, 32)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawStdEncoding.EncodeToString(append(salt, key...)), nil
+}
+
+// ChangePassword verifies the current password, stores a new password hash, and
+// revokes every session for the account. The caller must clear the current
+// session cookie after a successful change.
+func ChangePassword(ctx context.Context, db *sql.DB, username, current, next string) error {
+	if len(next) < 12 || len(next) > 512 {
+		return fmt.Errorf("%w: 新密码长度须为 12–512 字节", ErrInvalid)
+	}
+	if current == next {
+		return fmt.Errorf("%w: 新密码不能与当前密码相同", ErrInvalid)
+	}
+	_, valid, err := authenticate(ctx, db, username, current)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return fmt.Errorf("%w: 当前密码不正确", ErrInvalid)
+	}
+	value, err := hashPassword(next)
+	if err != nil {
+		return err
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, "UPDATE users SET password_hash=$1 WHERE username=$2", value, username)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM sessions WHERE username=$1", username); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func authenticate(ctx context.Context, db *sql.DB, username, password string) (User, bool, error) {
@@ -151,6 +204,27 @@ func (s *Server) signOut(w http.ResponseWriter, r *http.Request) {
 			s.databaseError(w, err)
 			return
 		}
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: sessionCookie, Path: "/", MaxAge: -1, HttpOnly: true,
+		SameSite: http.SameSiteStrictMode, Secure: s.secureCookie,
+	})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
+	}
+	if err := decode(w, r, &input); err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	user := currentUser(r)
+	if err := ChangePassword(r.Context(), s.db, user.Username, input.CurrentPassword, input.NewPassword); err != nil {
+		s.databaseError(w, err)
+		return
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: sessionCookie, Path: "/", MaxAge: -1, HttpOnly: true,

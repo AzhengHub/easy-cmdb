@@ -79,6 +79,15 @@ viewer:
 - Leaving both `operator` / `viewer` fields empty disables that account.
 - Accounts are created only on first start; changing `config.yaml` later does not change an existing account's password.
 
+## System management
+
+The `系统管理` section contains:
+
+- **Change history**: review changes to assets, relationships, and facilities
+- **Change password**: update the password for the signed-in account
+
+Changing the password requires the current password and a new password of at least 12 characters. After a successful change, every session for the account is revoked and the user must sign in again.
+
 ## Deploy to a Linux server
 
 The server-side installer is `scripts/install.sh`. It installs a prebuilt `easy` binary and frontend `dist/`; it does not build them. A fresh clone cannot be installed directly on a server without Go/Node. A one-command release installer will be added when release packages are available.

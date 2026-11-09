@@ -1,1 +1,1 @@
-export type Page = 'home' | 'host' | 'vm' | 'switch' | 'facilities' | 'ipam' | 'changes'
+export type Page = 'home' | 'host' | 'vm' | 'switch' | 'facilities' | 'ipam' | 'changes' | 'password'
