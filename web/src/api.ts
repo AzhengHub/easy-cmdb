@@ -79,6 +79,11 @@ export interface User {
   role: 'admin' | 'operator' | 'viewer'
 }
 
+export interface Captcha {
+  id: string
+  image: string
+}
+
 export class APIError extends Error {
   constructor(public status: number, message: string) {
     super(message)

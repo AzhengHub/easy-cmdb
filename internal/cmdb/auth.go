@@ -91,11 +91,17 @@ func sessionHash(token string) []byte {
 
 func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Username    string `json:"username"`
+		Password    string `json:"password"`
+		CaptchaID   string `json:"captchaId"`
+		CaptchaCode string `json:"captchaCode"`
 	}
 	if err := decode(w, r, &input); err != nil {
 		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !s.captchas.verify(strings.TrimSpace(input.CaptchaID), input.CaptchaCode) {
+		fail(w, http.StatusBadRequest, "验证码错误或已过期，请刷新后重试")
 		return
 	}
 	if len(input.Username) > 80 || len(input.Password) > 512 {

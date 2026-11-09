@@ -19,10 +19,11 @@ type Server struct {
 	db           *sql.DB
 	secureCookie bool
 	loginSlots   chan struct{}
+	captchas     *captchaStore
 }
 
 func NewServer(db *sql.DB, secureCookie bool, frontend http.Handler) http.Handler {
-	s := &Server{db: db, secureCookie: secureCookie, loginSlots: make(chan struct{}, 4)}
+	s := &Server{db: db, secureCookie: secureCookie, loginSlots: make(chan struct{}, 4), captchas: newCaptchaStore(captchaMax)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		if err := s.db.PingContext(r.Context()); err != nil {
@@ -31,6 +32,7 @@ func NewServer(db *sql.DB, secureCookie bool, frontend http.Handler) http.Handle
 		}
 		respond(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	mux.HandleFunc("GET /api/captcha", s.issueCaptcha)
 	mux.HandleFunc("POST /api/login", s.signIn)
 	mux.HandleFunc("POST /api/logout", s.requireUser(false, s.signOut))
 	mux.HandleFunc("GET /api/me", s.requireUser(false, func(w http.ResponseWriter, r *http.Request) {

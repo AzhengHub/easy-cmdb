@@ -13,7 +13,7 @@ import {
   SearchOutlined, SunOutlined, UploadOutlined, UserOutlined,
 } from '@ant-design/icons'
 import { api, apiCSV, APIError } from './api'
-import type { Asset, AssetFields, Change, Kind, Link, LinkKind, Subnet, User } from './api'
+import type { Asset, AssetFields, Captcha, Change, Kind, Link, LinkKind, Subnet, User } from './api'
 import { assetLocations, locationLabel } from './facilities'
 import type { AssetLocation, Facilities } from './facilities'
 import type { Page } from './types'
@@ -128,6 +128,9 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   const [busy, setBusy] = useState(false)
   const [loginBusy, setLoginBusy] = useState(false)
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
+  const [captcha, setCaptcha] = useState<Captcha | null>(null)
+  const [captchaCode, setCaptchaCode] = useState('')
+  const [captchaLoading, setCaptchaLoading] = useState(false)
   const [error, setError] = useState('')
   const [page, setPage] = useState<Page>('home')
   const [collapsed, setCollapsed] = useState(false)
@@ -258,15 +261,44 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
     else setError(messageText(e))
   }
 
+  useEffect(() => {
+    if (!checking && !user) void loadCaptcha()
+  }, [checking, user, dark])
+
+  async function loadCaptcha() {
+    setCaptchaLoading(true)
+    try {
+      setCaptcha(await api<Captcha>(`/captcha?theme=${dark ? 'dark' : 'light'}`))
+      setCaptchaCode('')
+    } catch (e) {
+      setError('验证码加载失败，请刷新重试')
+      if (e instanceof APIError && e.status === 401) setUser(null)
+    } finally {
+      setCaptchaLoading(false)
+    }
+  }
+
   async function login() {
+    if (!captcha) {
+      setError('验证码尚未加载，请刷新验证码')
+      return
+    }
     setLoginBusy(true)
     setError('')
     try {
-      setUser(await api<User>('/login', 'POST', loginForm))
+      setUser(await api<User>('/login', 'POST', {
+        ...loginForm,
+        captchaId: captcha.id,
+        captchaCode,
+      }))
       setLoginForm({ username: loginForm.username, password: '' })
+      setCaptcha(null)
+      setCaptchaCode('')
       await loadAll()
     } catch (e) {
       setError(messageText(e))
+      setCaptchaCode('')
+      await loadCaptcha()
     } finally {
       setLoginBusy(false)
     }
@@ -511,7 +543,28 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
                 onChange={event => setLoginForm(current => ({ ...current, password: event.target.value }))}
               />
             </Form.Item>
-            <Button type="primary" htmlType="submit" block size="large" loading={loginBusy}>登录</Button>
+            <Form.Item label="验证码" required>
+              <div className="captcha-row">
+                <Input
+                  size="large" value={captchaCode} maxLength={8} autoComplete="off" placeholder="请输入右侧字符"
+                  onChange={event => setCaptchaCode(event.target.value)}
+                />
+                <button
+                  type="button" className="captcha-image-button" title="点击刷新验证码"
+                  aria-label="刷新验证码" onClick={() => void loadCaptcha()} disabled={captchaLoading}
+                >
+                  {captcha ? <img src={captcha.image} alt="验证码" /> : <span className="captcha-placeholder">加载中</span>}
+                </button>
+                <Button
+                  type="text" icon={<ReloadOutlined />} aria-label="刷新验证码"
+                  loading={captchaLoading} onClick={() => void loadCaptcha()}
+                />
+              </div>
+            </Form.Item>
+            <Button
+              type="primary" htmlType="submit" block size="large"
+              loading={loginBusy} disabled={captchaLoading || !captcha || !captchaCode.trim()}
+            >登录</Button>
           </Form>
         </Card>
       </div>

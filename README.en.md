@@ -42,7 +42,7 @@ go build -trimpath -o bin/easy.exe ./cmd/easy
 .\bin\easy.exe serve
 ```
 
-Open [http://127.0.0.1:8080](http://127.0.0.1:8080). The default initial sign-in is `admin` with password `default`; change it in the configuration below. A new installation starts with an empty inventory. Add assets in the web interface or use CSV import as described below.
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080). The default initial sign-in is `admin` with password `default`; change it in the configuration below. Login requires a graphical captcha, valid for five minutes and usable only once. A new installation starts with an empty inventory. Add assets in the web interface or use CSV import as described below.
 
 The service binds to `127.0.0.1:8080` by default. Before the first start of a network-accessible installation, copy `config.example.yaml` to `config.yaml` and set `admin.password` to a unique password of at least 12 bytes. Set `cookie_secure: true` when serving the application through an HTTPS reverse proxy. The SQLite database file contains password hashes and asset data, so restrict access to the database file, backups, and asset exports. Accounts are created from the configuration on first start; existing accounts use their stored passwords.
 
