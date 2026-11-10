@@ -22,6 +22,7 @@ import { ChangeList } from './components/ChangeList'
 import { ChangePassword } from './components/ChangePassword'
 import { Dashboard } from './components/Dashboard'
 import { FacilityView } from './components/FacilityView'
+import { GlobalSearch } from './components/GlobalSearch'
 import { IpamView } from './components/IpamView'
 import { TagManager } from './components/TagManager'
 import { Wordmark } from './components/Wordmark'
@@ -1022,6 +1023,21 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
               <Button type="text" onClick={() => setCollapsed(false)} aria-label="展开菜单"><MenuUnfoldOutlined /></Button>
             )}
             <h1>{pageTitle}</h1>
+            <GlobalSearch
+              onAsset={id => void openAsset(id)}
+              onRoom={id => {
+                setFacilityRoomId(id)
+                setFacilityRackId(null)
+                goTo('facilities')
+              }}
+              onRack={(roomId, rackId) => {
+                setFacilityRoomId(roomId)
+                setFacilityRackId(rackId)
+                goTo('facilities')
+              }}
+              onIpam={() => goTo('ipam')}
+              onTag={() => goTo('tags')}
+            />
           </div>
           <Space size={6}>
             {(page === 'host' || page === 'vm' || page === 'switch') && editable && (

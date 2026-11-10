@@ -75,6 +75,8 @@ export interface Change {
   createdAt: string
 }
 
+export type SearchResultType = 'asset' | 'tag' | 'room' | 'rack' | 'subnet' | 'ip'
+
 export interface Tag {
   id: number
   name: string
@@ -87,6 +89,22 @@ export interface TagFields {
   name: string
   color: string
   description: string
+}
+
+export interface SearchResult {
+  type: SearchResultType
+  id: number
+  label: string
+  detail: string
+  kind?: string
+  status?: string
+  address?: string
+  assetId?: number
+  roomId?: number
+  rackId?: number
+  subnetId?: number
+  tagId?: number
+  color?: string
 }
 
 export interface User {
