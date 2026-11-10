@@ -201,6 +201,7 @@ func (s *Server) bulkUpdateAssets(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		IDs         []int64 `json:"ids"`
 		Status      *string `json:"status"`
+		Platform    *string `json:"platform"`
 		Lifecycle   *string `json:"lifecycle"`
 		Owner       *string `json:"owner"`
 		Environment *string `json:"environment"`
@@ -226,7 +227,8 @@ func (s *Server) bulkUpdateAssets(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	updated, err := BulkUpdateAssets(r.Context(), s.db, ids, BulkAssetPatch{
-		Status: input.Status, Lifecycle: input.Lifecycle, Owner: input.Owner, Environment: input.Environment,
+		Status: input.Status, Platform: input.Platform, Lifecycle: input.Lifecycle,
+		Owner: input.Owner, Environment: input.Environment,
 	}, currentUser(r).Username)
 	if err != nil {
 		s.databaseError(w, err)

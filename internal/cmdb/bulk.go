@@ -11,13 +11,14 @@ import (
 // per affected object.
 type BulkAssetPatch struct {
 	Status      *string
+	Platform    *string
 	Lifecycle   *string
 	Owner       *string
 	Environment *string
 }
 
 func (p BulkAssetPatch) empty() bool {
-	return p.Status == nil && p.Lifecycle == nil && p.Owner == nil && p.Environment == nil
+	return p.Status == nil && p.Platform == nil && p.Lifecycle == nil && p.Owner == nil && p.Environment == nil
 }
 
 func BulkUpdateAssets(ctx context.Context, db *sql.DB, ids []int64, patch BulkAssetPatch, actor string) (int, error) {
@@ -44,6 +45,9 @@ func BulkUpdateAssets(ctx context.Context, db *sql.DB, ids []int64, patch BulkAs
 		if patch.Status != nil {
 			fields.Status = *patch.Status
 		}
+		if patch.Platform != nil {
+			fields.Platform = *patch.Platform
+		}
 		if patch.Lifecycle != nil {
 			fields.Lifecycle = *patch.Lifecycle
 		}
@@ -62,10 +66,10 @@ func BulkUpdateAssets(ctx context.Context, db *sql.DB, ids []int64, patch BulkAs
 
 		after, err := readAsset(tx.QueryRowContext(ctx, `
 			UPDATE assets
-			SET status=$2, lifecycle=$3, owner=$4, environment=$5, version=version+1, updated_at=$6
+			SET status=$2, platform=$3, lifecycle=$4, owner=$5, environment=$6, version=version+1, updated_at=$7
 			WHERE id=$1
 			RETURNING `+assetColumns,
-			id, fields.Status, fields.Lifecycle, fields.Owner, fields.Environment, nowText(),
+			id, fields.Status, fields.Platform, fields.Lifecycle, fields.Owner, fields.Environment, nowText(),
 		))
 		if err != nil {
 			return 0, err

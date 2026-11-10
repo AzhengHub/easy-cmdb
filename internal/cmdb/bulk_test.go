@@ -23,9 +23,10 @@ func TestBulkUpdateAssets(t *testing.T) {
 	}
 
 	status := "online"
+	platform := "kvm"
 	owner := " 平台组 "
 	updated, err := BulkUpdateAssets(ctx, db, []int64{first.ID, second.ID}, BulkAssetPatch{
-		Status: &status, Owner: &owner,
+		Status: &status, Platform: &platform, Owner: &owner,
 	}, "tester")
 	if err != nil {
 		t.Fatalf("bulk update: %v", err)
@@ -34,13 +35,13 @@ func TestBulkUpdateAssets(t *testing.T) {
 		t.Fatalf("updated = %d, want 2", updated)
 	}
 
-	var gotOwner string
+	var gotOwner, gotPlatform string
 	var gotVersion int
-	if err := db.QueryRowContext(ctx, "SELECT owner, version FROM assets WHERE id=$1", first.ID).Scan(&gotOwner, &gotVersion); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT owner, platform, version FROM assets WHERE id=$1", first.ID).Scan(&gotOwner, &gotPlatform, &gotVersion); err != nil {
 		t.Fatalf("read updated asset: %v", err)
 	}
-	if gotOwner != "平台组" || gotVersion != 2 {
-		t.Fatalf("owner/version = %q/%d, want 平台组/2", gotOwner, gotVersion)
+	if gotOwner != "平台组" || gotPlatform != "kvm" || gotVersion != 2 {
+		t.Fatalf("owner/platform/version = %q/%q/%d, want 平台组/kvm/2", gotOwner, gotPlatform, gotVersion)
 	}
 	changes, err := ListChanges(ctx, db, first.ID)
 	if err != nil {
@@ -56,6 +57,10 @@ func TestBulkUpdateAssets(t *testing.T) {
 	invalid := "not-a-status"
 	if _, err := BulkUpdateAssets(ctx, db, []int64{first.ID}, BulkAssetPatch{Status: &invalid}, "tester"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("invalid status error = %v, want ErrInvalid", err)
+	}
+	invalidPlatform := "not-a-platform"
+	if _, err := BulkUpdateAssets(ctx, db, []int64{first.ID}, BulkAssetPatch{Platform: &invalidPlatform}, "tester"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("invalid platform error = %v, want ErrInvalid", err)
 	}
 	if _, err := BulkUpdateAssets(ctx, db, nil, BulkAssetPatch{Status: &status}, "tester"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("empty ids error = %v, want ErrInvalid", err)
