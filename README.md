@@ -1,5 +1,7 @@
 # LinkCMDB
 
+[![CI](https://github.com/linkcmdb/linkcmdb/actions/workflows/ci.yml/badge.svg)](https://github.com/linkcmdb/linkcmdb/actions/workflows/ci.yml)
+
 [English](README.en.md)
 
 LinkCMDB 是一款简单易用的配置管理数据库，用于集中管理 IT 资产、基础设施配置和资产关系。项目面向中小规模、单机部署的运维场景：约 3000 台虚拟机，整体规模控制在 5000 台主机以内，少量运维人员即可维护。设计取舍是简单、够用、好维护：不引入额外中间件，也不追求大规模集群。当前支持物理机、虚拟机和交换机，提供首页汇总仪表盘、资源详情、搜索筛选、CSV 导入导出、IPAM 网段与 IP 管理、操作审计以及数据中心机柜视图。
