@@ -13,7 +13,7 @@ import {
   SearchOutlined, SettingOutlined, StarFilled, StarOutlined, SunOutlined, TagsOutlined, UploadOutlined, UserOutlined,
 } from '@ant-design/icons'
 import { api, apiCSV, APIError } from './api'
-import type { Asset, AssetFields, Captcha, Change, Kind, Link, LinkKind, Subnet, Tag as TagItem, User } from './api'
+import type { Asset, AssetFields, Captcha, Change, ImportPreview, Kind, Link, LinkKind, Subnet, Tag as TagItem, User } from './api'
 import { assetLocations, locationLabel } from './facilities'
 import type { AssetLocation, Facilities } from './facilities'
 import type { Page } from './types'
@@ -167,6 +167,9 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultAssetColumns)
   const [pagination, setPagination] = useState(1)
   const [importing, setImporting] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
+  const [pendingImport, setPendingImport] = useState<File | null>(null)
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -788,6 +791,24 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
     ]])
   }
 
+  async function previewCSV(file: File) {
+    if (file.size > 16 * 1024 * 1024) {
+      setError('CSV 文件不能超过 16 MiB')
+      return
+    }
+    setPreviewing(true)
+    setError('')
+    try {
+      const preview = await apiCSV<ImportPreview>('/assets/import/preview', file)
+      setImportPreview(preview)
+      setPendingImport(file)
+    } catch (e) {
+      handleError(e)
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
   async function importCSV(file: File) {
     if (file.size > 16 * 1024 * 1024) {
       setError('CSV 文件不能超过 16 MiB')
@@ -798,6 +819,8 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
     try {
       const result = await apiCSV<{ imported: number }>('/assets/import', file)
       await loadAll()
+      setImportPreview(null)
+      setPendingImport(null)
       void message.success(`已导入 ${result.imported} 条资产`)
     } catch (e) {
       handleError(e)
@@ -1108,9 +1131,9 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
                 <Space wrap>
                   <Upload
                     accept=".csv,text/csv" showUploadList={false}
-                    beforeUpload={file => { void importCSV(file); return false }}
+                    beforeUpload={file => { void previewCSV(file); return false }}
                   >
-                    <Button loading={importing}><UploadOutlined /> 导入 CSV</Button>
+                    <Button loading={importing || previewing}><UploadOutlined /> 导入 CSV</Button>
                   </Upload>
                   <Button onClick={downloadTemplate}><DownloadOutlined /> 下载模板</Button>
                   <Button disabled={!filtered.length} onClick={exportCSV}><DownloadOutlined /> 导出 CSV</Button>
@@ -1233,6 +1256,65 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
           )}
         </Content>
       </Layout>
+
+      <Modal
+        open={!!importPreview} title="CSV 导入预检" width={780}
+        footer={(
+          <Space>
+            <Button disabled={importing} onClick={() => { setImportPreview(null); setPendingImport(null) }}>取消</Button>
+            <Button
+              type="primary" loading={importing}
+              disabled={!importPreview || importPreview.errors.length > 0 || importPreview.valid === 0}
+              onClick={() => { if (pendingImport) void importCSV(pendingImport) }}
+            >确认导入 {importPreview?.valid ?? 0} 条</Button>
+          </Space>
+        )}
+        onCancel={() => { if (!importing) { setImportPreview(null); setPendingImport(null) } }}
+        destroyOnHidden
+      >
+        {importPreview && (
+          <>
+            <Alert
+              type={importPreview.errors.length ? 'error' : 'success'} showIcon className="bulk-alert"
+              message={importPreview.errors.length
+                ? `预检发现 ${importPreview.errors.length} 个问题：共 ${importPreview.rows} 行，可导入 ${importPreview.valid} 行。`
+                : `预检通过：共 ${importPreview.rows} 行，可导入 ${importPreview.valid} 行。`}
+            />
+            <p className="muted">预检不会写入数据；确认后才在一个事务中导入。</p>
+            {importPreview.errors.length > 0 && (
+              <div className="import-errors">
+                {importPreview.errors.slice(0, 20).map((error, index) => (
+                  <div key={`${error.row}-${index}`} className="import-error-row">
+                    <strong>第 {error.row} 行</strong>
+                    <span>{error.message}</span>
+                  </div>
+                ))}
+                {importPreview.errors.length > 20 && (
+                  <div className="muted">还有 {importPreview.errors.length - 20} 个问题未显示。</div>
+                )}
+              </div>
+            )}
+            {importPreview.sample.length > 0 && (
+              <Table
+                rowKey="row" size="small" pagination={false} dataSource={importPreview.sample}
+                scroll={{ x: 680 }}
+                columns={[
+                  { title: '行', dataIndex: 'row', width: 56 },
+                  { title: '资源名称', dataIndex: 'name', width: 150 },
+                  { title: '类型', dataIndex: 'kind', width: 80, render: value => kinds[value as Kind]?.label ?? value },
+                  { title: '状态', dataIndex: 'status', width: 90, render: value => statuses[value]?.label ?? (value || '—') },
+                  { title: '生命周期', dataIndex: 'lifecycle', width: 90, render: value => value === 'retired' ? '已退役' : '在册' },
+                  { title: '负责人', dataIndex: 'owner', width: 110, render: value => value || '—' },
+                  { title: '地址 / IP', dataIndex: 'address', width: 140, render: value => <span className="mono">{value || '—'}</span> },
+                ]}
+              />
+            )}
+            {importPreview.valid > importPreview.sample.length && (
+              <p className="muted">样例仅显示前 {importPreview.sample.length} 行可导入数据。</p>
+            )}
+          </>
+        )}
+      </Modal>
 
       <Modal
         open={bulkTagOpen} title={`批量标签 ${selectedAssetIds.length} 条资产`} footer={null} width={500} destroyOnHidden

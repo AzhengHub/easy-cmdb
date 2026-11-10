@@ -77,6 +77,33 @@ export interface Change {
 
 export type SearchResultType = 'asset' | 'tag' | 'room' | 'rack' | 'subnet' | 'ip'
 
+export interface ImportPreviewRow {
+  row: number
+  name: string
+  kind: string
+  platform: string
+  status: string
+  lifecycle: string
+  address: string
+  cpu: number
+  memoryMiB: number
+  owner: string
+  environment: string
+  notes: string
+}
+
+export interface ImportRowError {
+  row: number
+  message: string
+}
+
+export interface ImportPreview {
+  rows: number
+  valid: number
+  errors: ImportRowError[]
+  sample: ImportPreviewRow[]
+}
+
 export interface Tag {
   id: number
   name: string
