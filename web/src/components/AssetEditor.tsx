@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Alert, Button, Col, Form, Input, InputNumber, Row, Select, Space } from 'antd'
+import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
 import type { Asset, AssetFields, Kind } from '../api'
 
 interface Props {
@@ -9,6 +10,72 @@ interface Props {
   error: string
   onSave: (fields: AssetFields & { version: number }) => void
   onCancel: () => void
+}
+
+type AttributeType = 'string' | 'number' | 'boolean' | 'json'
+
+interface AttributeRow {
+  id: number
+  key: string
+  value: string
+  type: AttributeType
+}
+
+const attributeTypeOptions = [
+  { value: 'string', label: '文本' },
+  { value: 'number', label: '数字' },
+  { value: 'boolean', label: '布尔' },
+  { value: 'json', label: 'JSON' },
+]
+
+function attributesToRows(attributes: Record<string, unknown>): AttributeRow[] {
+  return Object.entries(attributes).map(([key, value], index) => {
+    if (typeof value === 'string') {
+      return { id: index + 1, key, value, type: 'string' as const }
+    }
+    if (typeof value === 'number') {
+      return { id: index + 1, key, value: String(value), type: 'number' as const }
+    }
+    if (typeof value === 'boolean') {
+      return { id: index + 1, key, value: value ? 'true' : 'false', type: 'boolean' as const }
+    }
+    return { id: index + 1, key, value: JSON.stringify(value) ?? 'null', type: 'json' as const }
+  })
+}
+
+function parseAttributeRows(rows: AttributeRow[]): Record<string, unknown> {
+  const attributes: Record<string, unknown> = {}
+  for (const row of rows) {
+    const key = row.key.trim()
+    if (!key) {
+      if (!row.value.trim()) continue
+      throw new Error('扩展属性存在空键名')
+    }
+    if (Object.prototype.hasOwnProperty.call(attributes, key)) {
+      throw new Error(`扩展属性键名重复：${key}`)
+    }
+    switch (row.type) {
+      case 'number': {
+        const value = Number(row.value)
+        if (!row.value.trim() || !Number.isFinite(value)) throw new Error(`扩展属性「${key}」须为有效数字`)
+        attributes[key] = value
+        break
+      }
+      case 'boolean':
+        attributes[key] = row.value === 'true'
+        break
+      case 'json':
+        try {
+          attributes[key] = JSON.parse(row.value || 'null')
+        } catch {
+          throw new Error(`扩展属性「${key}」不是有效的 JSON`)
+        }
+        break
+      default:
+        attributes[key] = row.value
+    }
+  }
+  return attributes
 }
 
 export function AssetEditor({ asset, defaultKind, busy, error, onSave, onCancel }: Props) {
@@ -26,27 +93,39 @@ export function AssetEditor({ asset, defaultKind, busy, error, onSave, onCancel 
     notes: asset?.notes ?? '',
     attributes: asset?.attributes ?? {},
   })
-  const [attrs, setAttrs] = useState(JSON.stringify(asset?.attributes ?? {}, null, 2))
+  const [attributeRows, setAttributeRows] = useState<AttributeRow[]>(() => attributesToRows(asset?.attributes ?? {}))
+  const [nextAttributeId, setNextAttributeId] = useState(() => Object.keys(asset?.attributes ?? {}).length + 1)
   const [validation, setValidation] = useState('')
 
   function update<K extends keyof AssetFields>(key: K, value: AssetFields[K]) {
     setFields(current => ({ ...current, [key]: value }))
   }
 
+  function updateAttribute(id: number, patch: Partial<AttributeRow>) {
+    setAttributeRows(current => current.map(row => row.id === id ? { ...row, ...patch } : row))
+  }
+
+  function addAttribute() {
+    setAttributeRows(current => [...current, { id: nextAttributeId, key: '', value: '', type: 'string' }])
+    setNextAttributeId(current => current + 1)
+  }
+
+  function removeAttribute(id: number) {
+    setAttributeRows(current => current.filter(row => row.id !== id))
+  }
+
   function save() {
     setValidation('')
     try {
-      const parsed: unknown = JSON.parse(attrs || '{}')
-      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error()
       onSave({
         ...fields,
-        attributes: parsed as Record<string, unknown>,
+        attributes: parseAttributeRows(attributeRows),
         cpu: Number(fields.cpu || 0),
         memoryMiB: Number(fields.memoryMiB || 0),
         version: asset?.version ?? 0,
       })
-    } catch {
-      setValidation('扩展属性须为有效的 JSON 对象')
+    } catch (e) {
+      setValidation(e instanceof Error ? e.message : '扩展属性格式不正确')
     }
   }
 
@@ -132,8 +211,47 @@ export function AssetEditor({ asset, defaultKind, busy, error, onSave, onCancel 
           </Form.Item>
         </Col>
         <Col span={24}>
-          <Form.Item label="扩展属性（JSON）">
-            <Input.TextArea className="mono" value={attrs} rows={4} spellCheck={false} onChange={event => setAttrs(event.target.value)} />
+          <Form.Item label="扩展属性" extra="键值对；复杂的嵌套结构请选择 JSON 类型">
+            <div className="attribute-editor">
+              {attributeRows.map(row => (
+                <div key={row.id} className="attribute-row">
+                  <Input
+                    className="attribute-key" placeholder="键" maxLength={80}
+                    value={row.key} onChange={event => updateAttribute(row.id, { key: event.target.value })}
+                  />
+                  <Select
+                    className="attribute-type" value={row.type} options={attributeTypeOptions}
+                    onChange={value => updateAttribute(row.id, {
+                      type: value,
+                      ...(value === 'boolean' ? { value: row.value === 'false' ? 'false' : 'true' } : {}),
+                    })}
+                  />
+                  {row.type === 'boolean' ? (
+                    <Select
+                      className="attribute-value" value={row.value === 'false' ? 'false' : 'true'}
+                      onChange={value => updateAttribute(row.id, { value })}
+                      options={[{ value: 'true', label: 'true' }, { value: 'false', label: 'false' }]}
+                    />
+                  ) : row.type === 'json' ? (
+                    <Input.TextArea
+                      className="attribute-value mono" autoSize={{ minRows: 1, maxRows: 4 }} spellCheck={false}
+                      value={row.value} onChange={event => updateAttribute(row.id, { value: event.target.value })}
+                    />
+                  ) : (
+                    <Input
+                      className="attribute-value" placeholder="值"
+                      inputMode={row.type === 'number' ? 'decimal' : undefined}
+                      value={row.value} onChange={event => updateAttribute(row.id, { value: event.target.value })}
+                    />
+                  )}
+                  <Button
+                    type="text" danger icon={<DeleteOutlined />} aria-label="删除扩展属性"
+                    onClick={() => removeAttribute(row.id)}
+                  />
+                </div>
+              ))}
+              <Button type="dashed" icon={<PlusOutlined />} onClick={addAttribute}>添加属性</Button>
+            </div>
           </Form.Item>
         </Col>
       </Row>
