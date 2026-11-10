@@ -109,7 +109,10 @@ a { color: var(--primary); }
 .app-layout { min-height: 100vh; }
 .app-sider { background: var(--surface) !important; border-right: 1px solid var(--line); min-height: 100vh; }
 .app-sider .ant-layout-sider-children { display: flex; flex-direction: column; }
-.brand { display: flex; align-items: center; gap: 9px; height: 56px; padding: 0 16px; font-size: 16px; font-weight: 600; color: var(--text); cursor: pointer; white-space: nowrap; overflow: hidden; }
+.brand { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 60px; padding: 0 10px 0 16px; font-size: 19px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; }
+.brand-word { display: flex; align-items: center; min-width: 0; overflow: hidden; cursor: pointer; }
+.brand-collapse { flex: 0 0 auto; color: var(--muted); }
+.brand-collapse:hover { color: var(--text) !important; }
 .app-menu { flex: 1; border-inline-end: 0 !important; }
 .app-menu .ant-menu-sub.ant-menu-inline { position: relative; }
 .app-menu .ant-menu-sub.ant-menu-inline::before { content: ""; position: absolute; top: 2px; bottom: 2px; left: 30px; border-left: 1px dashed var(--line); pointer-events: none; }

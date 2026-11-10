@@ -613,8 +613,12 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
         className="app-sider" width={200} collapsedWidth={0} collapsed={collapsed}
         breakpoint="lg" trigger={null} onCollapse={setCollapsed}
       >
-        <div className="brand" onClick={() => goTo('home')}>
-          <Wordmark />
+        <div className="brand">
+          <span className="brand-word" onClick={() => goTo('home')}><Wordmark /></span>
+          <Button
+            className="brand-collapse" type="text" icon={<MenuOutlined />}
+            aria-label="收起菜单" onClick={() => setCollapsed(true)}
+          />
         </div>
         <Menu
           className="app-menu" mode="inline" selectedKeys={[page]}
@@ -632,7 +636,9 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
       <Layout>
         <Header className="app-header">
           <Space>
-            <Button type="text" onClick={() => setCollapsed(value => !value)}><MenuOutlined /></Button>
+            {collapsed && (
+              <Button type="text" onClick={() => setCollapsed(false)} aria-label="展开菜单"><MenuOutlined /></Button>
+            )}
           </Space>
           <Space size={4}>
             <ThemeToggle dark={dark} onToggleTheme={onToggleTheme} />
