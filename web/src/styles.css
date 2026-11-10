@@ -87,12 +87,9 @@ a { color: var(--primary); }
 .login-panel { position: relative; min-width: 0; display: flex; align-items: center; justify-content: center; padding: 88px 40px 48px; background: var(--surface); }
 .login-card { width: min(380px, 100%); background: transparent; box-shadow: none; }
 .login-card .ant-card-body { padding: 0; }
-.login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 48px; font-size: 22px; font-weight: 600; color: var(--text); }
-.login-heading { margin-bottom: 28px; }
-.login-heading h1 { color: var(--text); font-size: 28px; font-weight: 600; line-height: 1.35; }
-.login-heading p { margin-top: 8px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 44px; font-size: 28px; line-height: 1.35; font-weight: 600; color: var(--text); }
 .brand-logo { display: block; flex: 0 0 auto; width: 28px; height: 28px; }
-.login-brand .brand-logo { width: 36px; height: 36px; }
+.login-brand .brand-logo { width: 42px; height: 42px; }
 .login-alert { margin-bottom: 16px; }
 .login-theme-toggle { position: absolute; top: 24px; right: 28px; }
 .captcha-row { display: flex; align-items: center; gap: 8px; }

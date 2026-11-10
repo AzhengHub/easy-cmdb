@@ -564,10 +564,6 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
           <ThemeToggle dark={dark} onToggleTheme={onToggleTheme} className="login-theme-toggle" />
           <Card className="login-card" variant="borderless">
             <div className="login-brand"><Logo /> Easy CMDB</div>
-            <div className="login-heading">
-              <h1>欢迎使用</h1>
-              <p>登录以管理您的基础设施资产</p>
-            </div>
             {error && <Alert type="error" showIcon message={error} className="login-alert" />}
             <Form layout="vertical" onFinish={login}>
               <Form.Item label="账号" name="username" rules={[{ required: true, message: '请输入账号' }]}>
