@@ -74,67 +74,9 @@ var importLifecycles = map[string]string{
 // names are both accepted. Existing asset names are rejected to avoid silently
 // duplicating inventory during a repeated import.
 func ImportAssets(ctx context.Context, db *sql.DB, source io.Reader, actor string) (ImportResult, error) {
-	data, err := io.ReadAll(io.LimitReader(source, maxImportBytes+1))
-	if err != nil {
-		var maxErr *http.MaxBytesError
-		if errors.As(err, &maxErr) {
-			return ImportResult{}, fmt.Errorf("%w: CSV 文件不能超过 16 MiB", ErrInvalid)
-		}
-		return ImportResult{}, fmt.Errorf("%w: 读取 CSV 失败", ErrInvalid)
-	}
-	if len(data) > maxImportBytes {
-		return ImportResult{}, fmt.Errorf("%w: CSV 文件不能超过 16 MiB", ErrInvalid)
-	}
-	if !utf8.Valid(data) {
-		return ImportResult{}, fmt.Errorf("%w: CSV 须为 UTF-8 编码，Excel 请选择「CSV UTF-8」", ErrInvalid)
-	}
-	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
-
-	reader := csv.NewReader(bytes.NewReader(data))
-	reader.FieldsPerRecord = -1
-	header, err := reader.Read()
-	if errors.Is(err, io.EOF) {
-		return ImportResult{}, fmt.Errorf("%w: CSV 文件为空", ErrInvalid)
-	}
-	if err != nil {
-		return ImportResult{}, fmt.Errorf("%w: 无法读取 CSV 表头", ErrInvalid)
-	}
-	columns, err := mapImportColumns(header)
+	rows, err := parseImportFile(source)
 	if err != nil {
 		return ImportResult{}, err
-	}
-
-	records, err := reader.ReadAll()
-	if err != nil {
-		var parseErr *csv.ParseError
-		if errors.As(err, &parseErr) {
-			return ImportResult{}, fmt.Errorf("%w: 第 %d 行 CSV 格式不正确", ErrInvalid, parseErr.StartLine)
-		}
-		return ImportResult{}, fmt.Errorf("%w: 解析 CSV 失败", ErrInvalid)
-	}
-	rows := make([]importRow, 0, len(records))
-	seen := make(map[string]int)
-	for i, record := range records {
-		if importRecordEmpty(record) {
-			continue
-		}
-		rowNumber := i + 2
-		fields, err := decodeImportRow(record, columns, rowNumber)
-		if err != nil {
-			return ImportResult{}, err
-		}
-		nameKey := strings.ToLower(fields.Name)
-		if previous, exists := seen[nameKey]; exists {
-			return ImportResult{}, fmt.Errorf("%w: 第 %d 行：资源名称与第 %d 行重复", ErrInvalid, rowNumber, previous)
-		}
-		seen[nameKey] = rowNumber
-		rows = append(rows, importRow{number: rowNumber, fields: fields})
-	}
-	if len(rows) == 0 {
-		return ImportResult{}, fmt.Errorf("%w: CSV 中没有可导入的数据", ErrInvalid)
-	}
-	if len(rows) > maxImportRows {
-		return ImportResult{}, fmt.Errorf("%w: 单次最多导入 %d 行", ErrInvalid, maxImportRows)
 	}
 
 	tx, err := db.BeginTx(ctx, nil)
@@ -163,6 +105,186 @@ func ImportAssets(ctx context.Context, db *sql.DB, source io.Reader, actor strin
 	return ImportResult{Imported: len(rows)}, nil
 }
 
+type ImportRowError struct {
+	Row     int    `json:"row"`
+	Message string `json:"message"`
+}
+
+type ImportPreviewRow struct {
+	Row         int    `json:"row"`
+	Name        string `json:"name"`
+	Kind        string `json:"kind"`
+	Platform    string `json:"platform"`
+	Status      string `json:"status"`
+	Lifecycle   string `json:"lifecycle"`
+	Address     string `json:"address"`
+	CPU         int    `json:"cpu"`
+	MemoryMiB   int64  `json:"memoryMiB"`
+	Owner       string `json:"owner"`
+	Environment string `json:"environment"`
+	Notes       string `json:"notes"`
+}
+
+type ImportPreview struct {
+	Rows   int                `json:"rows"`
+	Valid  int                `json:"valid"`
+	Errors []ImportRowError   `json:"errors"`
+	Sample []ImportPreviewRow `json:"sample"`
+}
+
+// PreviewImport runs the same parsing and field validation as ImportAssets,
+// but collects row errors instead of stopping at the first one. It never
+// writes to the database.
+func PreviewImport(ctx context.Context, db *sql.DB, source io.Reader) (ImportPreview, error) {
+	columns, records, err := readImportRecords(source)
+	if err != nil {
+		return ImportPreview{}, err
+	}
+	preview := ImportPreview{Errors: make([]ImportRowError, 0)}
+	validRows := make([]importRow, 0, len(records))
+	seen := make(map[string]int)
+	for i, record := range records {
+		if importRecordEmpty(record) {
+			continue
+		}
+		preview.Rows++
+		rowNumber := i + 2
+		fields, err := decodeImportRow(record, columns, rowNumber)
+		if err != nil {
+			if len(preview.Errors) < 200 {
+				preview.Errors = append(preview.Errors, ImportRowError{Row: rowNumber, Message: importErrorMessage(err, rowNumber)})
+			}
+			continue
+		}
+		nameKey := strings.ToLower(fields.Name)
+		if previous, exists := seen[nameKey]; exists {
+			if len(preview.Errors) < 200 {
+				preview.Errors = append(preview.Errors, ImportRowError{
+					Row: rowNumber, Message: fmt.Sprintf("资源名称与第 %d 行重复", previous),
+				})
+			}
+			continue
+		}
+		seen[nameKey] = rowNumber
+		validRows = append(validRows, importRow{number: rowNumber, fields: fields})
+	}
+	if preview.Rows == 0 {
+		return ImportPreview{}, fmt.Errorf("%w: CSV 中没有可导入的数据", ErrInvalid)
+	}
+	if preview.Rows > maxImportRows {
+		return ImportPreview{}, fmt.Errorf("%w: 单次最多导入 %d 行", ErrInvalid, maxImportRows)
+	}
+
+	existing, err := importExistingNames(ctx, db)
+	if err != nil {
+		return ImportPreview{}, err
+	}
+	valid := make([]importRow, 0, len(validRows))
+	for _, row := range validRows {
+		if existing[strings.ToLower(row.fields.Name)] {
+			if len(preview.Errors) < 200 {
+				preview.Errors = append(preview.Errors, ImportRowError{
+					Row: row.number, Message: fmt.Sprintf("资产名称 %q 已存在", row.fields.Name),
+				})
+			}
+			continue
+		}
+		valid = append(valid, row)
+	}
+	preview.Valid = len(valid)
+	sampleSize := len(valid)
+	if sampleSize > 8 {
+		sampleSize = 8
+	}
+	preview.Sample = make([]ImportPreviewRow, 0, sampleSize)
+	for _, row := range valid[:sampleSize] {
+		preview.Sample = append(preview.Sample, ImportPreviewRow{
+			Row: row.number, Name: row.fields.Name, Kind: row.fields.Kind,
+			Platform: row.fields.Platform, Status: row.fields.Status, Lifecycle: row.fields.Lifecycle,
+			Address: row.fields.Address, CPU: row.fields.CPU, MemoryMiB: row.fields.MemoryMiB,
+			Owner: row.fields.Owner, Environment: row.fields.Environment, Notes: row.fields.Notes,
+		})
+	}
+	return preview, nil
+}
+
+func importErrorMessage(err error, rowNumber int) string {
+	message := strings.TrimPrefix(err.Error(), ErrInvalid.Error()+": ")
+	return strings.TrimPrefix(message, fmt.Sprintf("第 %d 行：", rowNumber))
+}
+
+func readImportRecords(source io.Reader) (map[string]int, [][]string, error) {
+	data, err := io.ReadAll(io.LimitReader(source, maxImportBytes+1))
+	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			return nil, nil, fmt.Errorf("%w: CSV 文件不能超过 16 MiB", ErrInvalid)
+		}
+		return nil, nil, fmt.Errorf("%w: 读取 CSV 失败", ErrInvalid)
+	}
+	if len(data) > maxImportBytes {
+		return nil, nil, fmt.Errorf("%w: CSV 文件不能超过 16 MiB", ErrInvalid)
+	}
+	if !utf8.Valid(data) {
+		return nil, nil, fmt.Errorf("%w: CSV 须为 UTF-8 编码，Excel 请选择「CSV UTF-8」", ErrInvalid)
+	}
+	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
+
+	reader := csv.NewReader(bytes.NewReader(data))
+	reader.FieldsPerRecord = -1
+	header, err := reader.Read()
+	if errors.Is(err, io.EOF) {
+		return nil, nil, fmt.Errorf("%w: CSV 文件为空", ErrInvalid)
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: 无法读取 CSV 表头", ErrInvalid)
+	}
+	columns, err := mapImportColumns(header)
+	if err != nil {
+		return nil, nil, err
+	}
+	records, err := reader.ReadAll()
+	if err != nil {
+		var parseErr *csv.ParseError
+		if errors.As(err, &parseErr) {
+			return nil, nil, fmt.Errorf("%w: 第 %d 行 CSV 格式不正确", ErrInvalid, parseErr.StartLine)
+		}
+		return nil, nil, fmt.Errorf("%w: 解析 CSV 失败", ErrInvalid)
+	}
+	return columns, records, nil
+}
+
+func parseImportFile(source io.Reader) ([]importRow, error) {
+	columns, records, err := readImportRecords(source)
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]importRow, 0, len(records))
+	seen := make(map[string]int)
+	for i, record := range records {
+		if importRecordEmpty(record) {
+			continue
+		}
+		rowNumber := i + 2
+		fields, err := decodeImportRow(record, columns, rowNumber)
+		if err != nil {
+			return nil, err
+		}
+		nameKey := strings.ToLower(fields.Name)
+		if previous, exists := seen[nameKey]; exists {
+			return nil, fmt.Errorf("%w: 第 %d 行：资源名称与第 %d 行重复", ErrInvalid, rowNumber, previous)
+		}
+		seen[nameKey] = rowNumber
+		rows = append(rows, importRow{number: rowNumber, fields: fields})
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("%w: CSV 中没有可导入的数据", ErrInvalid)
+	}
+	if len(rows) > maxImportRows {
+		return nil, fmt.Errorf("%w: 单次最多导入 %d 行", ErrInvalid, maxImportRows)
+	}
+	return rows, nil
+}
 func mapImportColumns(header []string) (map[string]int, error) {
 	columns := make(map[string]int, len(header))
 	for i, name := range header {
@@ -294,8 +416,8 @@ func importRowError(rowNumber int, format string, args ...any) error {
 	return fmt.Errorf("%w: 第 %d 行：%s", ErrInvalid, rowNumber, fmt.Sprintf(format, args...))
 }
 
-func importExistingNames(ctx context.Context, tx *sql.Tx) (map[string]bool, error) {
-	rows, err := tx.QueryContext(ctx, "SELECT name FROM assets")
+func importExistingNames(ctx context.Context, q queryer) (map[string]bool, error) {
+	rows, err := q.QueryContext(ctx, "SELECT name FROM assets")
 	if err != nil {
 		return nil, err
 	}
@@ -329,4 +451,24 @@ func (s *Server) importAssets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, http.StatusOK, result)
+}
+
+func (s *Server) previewImport(w http.ResponseWriter, r *http.Request) {
+	media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || (media != "text/csv" && media != "application/csv" && media != "application/vnd.ms-excel") {
+		fail(w, http.StatusBadRequest, "请上传 CSV 文件")
+		return
+	}
+	if r.ContentLength > maxImportBytes {
+		fail(w, http.StatusRequestEntityTooLarge, "CSV 文件不能超过 16 MiB")
+		return
+	}
+	body := http.MaxBytesReader(w, r.Body, maxImportBytes)
+	defer body.Close()
+	preview, err := PreviewImport(r.Context(), s.db, body)
+	if err != nil {
+		s.databaseError(w, err)
+		return
+	}
+	respond(w, http.StatusOK, preview)
 }

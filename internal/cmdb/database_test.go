@@ -237,6 +237,65 @@ func TestImportAssets(t *testing.T) {
 		t.Fatalf("empty import error = %v, want ErrInvalid", err)
 	}
 }
+func TestPreviewImport(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	var buf bytes.Buffer
+	writer := csv.NewWriter(&buf)
+	header := []string{"资源名称", "类型", "平台", "状态", "生命周期", "地址 / IP", "负责人", "环境"}
+	if err := writer.Write(header); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Write([]string{"preview-vm-01", "虚拟机", "KVM", "运行中", "在册", "192.0.2.20", "运维组", "测试"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Write([]string{"preview-host-01", "物理机", "", "在线", "在册", "192.0.2.21", "", ""}); err != nil {
+		t.Fatal(err)
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		t.Fatal(err)
+	}
+	data := buf.Bytes()
+
+	preview, err := PreviewImport(ctx, db, bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("preview import: %v", err)
+	}
+	if preview.Rows != 2 || len(preview.Sample) != 2 || preview.Sample[0].Name != "preview-vm-01" {
+		t.Fatalf("unexpected preview: %+v", preview)
+	}
+	assets, err := ListAssets(ctx, db)
+	if err != nil || len(assets) != 0 {
+		t.Fatalf("preview wrote assets: %d, %v", len(assets), err)
+	}
+	if _, err := ImportAssets(ctx, db, bytes.NewReader(data), "tester"); err != nil {
+		t.Fatalf("import after preview: %v", err)
+	}
+	duplicate, err := PreviewImport(ctx, db, bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("duplicate preview: %v", err)
+	}
+	if duplicate.Valid != 0 || len(duplicate.Errors) != 2 {
+		t.Fatalf("duplicate preview = %+v", duplicate)
+	}
+	invalid, err := PreviewImport(ctx, db, strings.NewReader("资源名称,类型\nbad,unknown\n"))
+	if err != nil {
+		t.Fatalf("invalid preview: %v", err)
+	}
+	if invalid.Valid != 0 || len(invalid.Errors) != 1 {
+		t.Fatalf("invalid preview = %+v", invalid)
+	}
+	mixed, err := PreviewImport(ctx, db, strings.NewReader("资源名称,类型\nmixed-01,虚拟机\nmixed-01,虚拟机\nbad,unknown\n"))
+	if err != nil {
+		t.Fatalf("mixed preview: %v", err)
+	}
+	if mixed.Rows != 3 || mixed.Valid != 1 || len(mixed.Errors) != 2 {
+		t.Fatalf("mixed preview = %+v", mixed)
+	}
+}
+
 func TestUsers(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()

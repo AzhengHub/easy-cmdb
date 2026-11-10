@@ -51,6 +51,7 @@ func NewServer(db *sql.DB, secureCookie bool, frontend http.Handler) http.Handle
 	mux.HandleFunc("PUT /api/assets/{id}/tags", s.requireUser(true, s.setAssetTags))
 	mux.HandleFunc("POST /api/assets", s.requireUser(true, s.saveAsset))
 	mux.HandleFunc("POST /api/assets/import", s.requireUser(true, s.importAssets))
+	mux.HandleFunc("POST /api/assets/import/preview", s.requireUser(true, s.previewImport))
 	mux.HandleFunc("PUT /api/assets/{id}", s.requireUser(true, s.saveAsset))
 	mux.HandleFunc("GET /api/links", s.requireUser(false, s.listLinks))
 	mux.HandleFunc("POST /api/links", s.requireUser(true, s.saveLink))
