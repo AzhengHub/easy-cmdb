@@ -20,6 +20,7 @@ export interface Asset extends AssetFields {
   id: number
   version: number
   updatedAt: string
+  tags?: Tag[]
 }
 
 export interface Link {
@@ -72,6 +73,20 @@ export interface Change {
   before: Record<string, unknown> | null
   after: Record<string, unknown> | null
   createdAt: string
+}
+
+export interface Tag {
+  id: number
+  name: string
+  color: string
+  description: string
+  assetCount?: number
+}
+
+export interface TagFields {
+  name: string
+  color: string
+  description: string
 }
 
 export interface User {

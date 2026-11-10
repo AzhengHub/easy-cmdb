@@ -3,7 +3,7 @@ import {
   Alert, Button, Descriptions, Drawer, Empty, List, Popconfirm, Progress, Space, Tabs, Tag,
 } from 'antd'
 import {
-  CloseOutlined, DeleteOutlined, EditOutlined, MenuOutlined, PlusOutlined, SettingOutlined,
+  CloseOutlined, DeleteOutlined, EditOutlined, MenuOutlined, PlusOutlined, SettingOutlined, StarFilled, StarOutlined,
 } from '@ant-design/icons'
 import type { Asset } from '../api'
 import { mountKinds, uRange } from '../facilities'
@@ -29,6 +29,8 @@ interface Props {
   onEditPlacement: (placement: Placement) => void
   onUnmount: (placement: Placement) => void
   onMove: (placement: Placement, startU: number) => void
+  bookmarked: boolean
+  onToggleBookmark: () => void
 }
 
 function nameOf(assets: Map<number, Asset>, id: number) {
@@ -46,6 +48,7 @@ function statusLabel(status?: string) {
 export function RackDetailDrawer({
   open, rack, room, devices, assets, editable, busy, focused, feedback, error, mountForm,
   onClose, onOpenAsset, onEditRack, onMount, onEditPlacement, onUnmount, onMove,
+  bookmarked, onToggleBookmark,
 }: Props) {
   const [tab, setTab] = useState('rack')
   if (!rack) return null
@@ -70,6 +73,7 @@ export function RackDetailDrawer({
             </div>
           </div>
           <div className="rack-drawer-actions">
+            <Button icon={bookmarked ? <StarFilled /> : <StarOutlined />} onClick={onToggleBookmark}>{bookmarked ? '已收藏' : '收藏'}</Button>
             {editable && (
               <>
                 <Button icon={<SettingOutlined />} disabled={busy} onClick={() => onEditRack(rack)}>编辑机柜</Button>

@@ -18,6 +18,8 @@ import { RoomScene } from './RoomScene'
 interface Props {
   roomId: number | null
   onRoomChange: (id: number) => void
+  openRackId: number | null
+  onRackOpened: () => void
   layout: Facilities
   assets: Asset[]
   links: Link[]
@@ -26,6 +28,8 @@ interface Props {
   focus: AssetLocation | null
   reload: () => Promise<void>
   onOpenAsset: (id: number) => void
+  bookmarkedRacks: number[]
+  onToggleRackBookmark: (id: number) => void
   onSessionError: (error: unknown) => void
 }
 
@@ -42,7 +46,7 @@ interface MountDraft {
   units: number
 }
 
-export function FacilityView({ roomId, onRoomChange, layout, assets, links, editable, dark, focus, reload, onOpenAsset, onSessionError }: Props) {
+export function FacilityView({ roomId, onRoomChange, openRackId, onRackOpened, layout, assets, links, editable, dark, focus, reload, onOpenAsset, bookmarkedRacks, onToggleRackBookmark, onSessionError }: Props) {
   const [rackId, setRackId] = useState<number | null>(null)
   const [focused, setFocused] = useState<number | null>(null)
   const [view, setView] = useState<'cards' | 'floor' | '3d'>('cards')
@@ -108,6 +112,15 @@ export function FacilityView({ roomId, onRoomChange, layout, assets, links, edit
   useEffect(() => {
     if (!racks.some(item => item.id === rackId)) setRackId(racks[0]?.id ?? null)
   }, [racks, rackId])
+
+  useEffect(() => {
+    if (!openRackId) return
+    const target = layout.racks.find(item => item.id === openRackId && item.roomId === activeRoomId)
+    if (!target) return
+    setRackId(target.id)
+    setRackDrawerOpen(true)
+    onRackOpened()
+  }, [openRackId, activeRoomId, layout.racks, onRackOpened])
 
   useEffect(() => {
     if (focus) showLocation(focus)
@@ -610,6 +623,7 @@ export function FacilityView({ roomId, onRoomChange, layout, assets, links, edit
       <RackDetailDrawer
         open={rackDrawerOpen} rack={rack ?? null} room={room ?? null}
         devices={devices} assets={byId} editable={editable} busy={busy}
+        bookmarked={!!rack && bookmarkedRacks.includes(rack.id)} onToggleBookmark={() => { if (rack) onToggleRackBookmark(rack.id) }}
         focused={focused} feedback={feedback} error={error} mountForm={mountForm}
         onClose={closeRackDrawer} onOpenAsset={onOpenAsset}
         onEditRack={value => { setRackDrawerOpen(false); editRack(value) }}

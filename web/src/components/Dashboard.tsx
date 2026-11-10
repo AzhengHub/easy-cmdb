@@ -1,11 +1,11 @@
 import { useMemo } from 'react'
-import { Card, Col, Empty, Progress, Row, Statistic } from 'antd'
+import { Button, Card, Col, Empty, Progress, Row, Statistic } from 'antd'
 import {
   ApartmentOutlined, CloudServerOutlined, DesktopOutlined, GlobalOutlined,
-  HddOutlined, SwapOutlined,
+  HddOutlined, MenuOutlined, StarFilled, StarOutlined, SwapOutlined,
 } from '@ant-design/icons'
 import type { EChartsOption } from 'echarts'
-import type { Asset, Change, Subnet } from '../api'
+import type { Asset, Change, Subnet, Tag } from '../api'
 import type { Facilities } from '../facilities'
 import type { Page } from '../types'
 import { Chart } from './Chart'
@@ -16,14 +16,20 @@ interface Props {
   subnets: Subnet[]
   facilities: Facilities
   changes: Change[]
+  bookmarks: number[]
+  rackBookmarks: number[]
+  subnetBookmarks: number[]
+  tags: Tag[]
   dark: boolean
   onGo: (page: Page) => void
   onOpenAsset: (id: number) => void
+  onOpenRack: (roomId: number, rackId: number) => void
+  onOpenSubnet: (id: number) => void
 }
 
 const colors = ['#1677ff', '#13c2c2', '#faad14', '#722ed1', '#52c41a']
 
-export function Dashboard({ assets, subnets, facilities, changes, dark, onGo, onOpenAsset }: Props) {
+export function Dashboard({ assets, subnets, facilities, changes, bookmarks, rackBookmarks, subnetBookmarks, tags, dark, onGo, onOpenAsset, onOpenRack, onOpenSubnet }: Props) {
   const stats = useMemo(() => {
     const active = assets.filter(asset => asset.lifecycle === 'active')
     const hosts = active.filter(asset => asset.kind === 'host')
@@ -41,6 +47,10 @@ export function Dashboard({ assets, subnets, facilities, changes, dark, onGo, on
     }
   }, [assets, subnets])
 
+  const bookmarked = useMemo(() => assets.filter(asset => bookmarks.includes(asset.id)), [assets, bookmarks])
+  const bookmarkedRacks = useMemo(() => facilities.racks.filter(rack => rackBookmarks.includes(rack.id)), [facilities.racks, rackBookmarks])
+  const bookmarkedSubnets = useMemo(() => subnets.filter(subnet => subnetBookmarks.includes(subnet.id)), [subnets, subnetBookmarks])
+  const favoriteCount = bookmarked.length + bookmarkedRacks.length + bookmarkedSubnets.length
   const typeOption = useMemo<EChartsOption>(() => ({
     tooltip: {
       trigger: 'item',
@@ -155,6 +165,40 @@ export function Dashboard({ assets, subnets, facilities, changes, dark, onGo, on
     }
   }, [dark, subnets])
 
+  const tagOption = useMemo<EChartsOption>(() => {
+    const top = tags
+      .filter(tag => (tag.assetCount ?? 0) > 0)
+      .sort((left, right) => (right.assetCount ?? 0) - (left.assetCount ?? 0))
+      .slice(0, 8)
+      .reverse()
+    return {
+      tooltip: {
+        trigger: 'axis', axisPointer: { type: 'shadow' },
+        backgroundColor: dark ? '#1f1f1f' : '#ffffff',
+        borderColor: dark ? '#303030' : '#f0f0f0',
+        textStyle: { color: dark ? '#f0f0f0' : '#1f1f1f' },
+      },
+      grid: { left: 8, right: 34, bottom: 8, top: 10, containLabel: true },
+      xAxis: {
+        type: 'value', minInterval: 1,
+        axisLabel: { color: dark ? '#d9d9d9' : '#595959' },
+        splitLine: { lineStyle: { color: dark ? '#303030' : '#f0f0f0' } },
+      },
+      yAxis: {
+        type: 'category', data: top.map(tag => tag.name),
+        axisLabel: { color: dark ? '#d9d9d9' : '#595959' },
+      },
+      series: [{
+        type: 'bar', barMaxWidth: 18,
+        label: { show: true, position: 'right', color: dark ? '#d9d9d9' : '#1f1f1f' },
+        data: top.map(tag => ({
+          value: tag.assetCount ?? 0,
+          itemStyle: { color: tag.color, borderRadius: [0, 4, 4, 0] },
+        })),
+      }],
+    }
+  }, [dark, tags])
+
   const ipPercent = stats.usable ? Math.round(stats.used / stats.usable * 100) : 0
 
   return (
@@ -180,6 +224,75 @@ export function Dashboard({ assets, subnets, facilities, changes, dark, onGo, on
             </Card>
           </Col>
         ))}
+      </Row>
+
+      <Row gutter={[16, 16]} className="dashboard-section">
+        <Col xs={24} lg={14}>
+          <Card title={`我的收藏${favoriteCount ? ` (${favoriteCount})` : ''}`} size="small">
+            {favoriteCount ? (
+              <>
+                {bookmarked.length > 0 && (
+                  <div className="bookmark-grid">
+                    {bookmarked.slice(0, 8).map(asset => (
+                      <button key={asset.id} type="button" className="bookmark-item" onClick={() => onOpenAsset(asset.id)}>
+                        <span className="bookmark-icon">{asset.kind === 'host' ? <CloudServerOutlined /> : asset.kind === 'switch' ? <SwapOutlined /> : <DesktopOutlined />}</span>
+                        <span className="bookmark-copy">
+                          <strong>{asset.name}</strong>
+                          <small>{asset.kind === 'host' ? '物理机' : asset.kind === 'switch' ? '交换机' : '虚拟机'} · {asset.address || asset.owner || '—'}</small>
+                        </span>
+                        <StarFilled className="bookmark-star" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {bookmarkedRacks.length > 0 && (
+                  <div className="favorite-group">
+                    <span className="favorite-group-title">机柜</span>
+                    <div className="favorite-chips">
+                      {bookmarkedRacks.slice(0, 8).map(rack => (
+                        <button key={rack.id} type="button" className="favorite-chip" onClick={() => onOpenRack(rack.roomId, rack.id)}>
+                          <span className="favorite-chip-icon"><MenuOutlined /></span>
+                          <span className="favorite-chip-copy">
+                            <strong>{rack.name}</strong>
+                            <small>{facilities.rooms.find(room => room.id === rack.roomId)?.name ?? '未绑定数据中心'} · {rack.heightU}U</small>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {bookmarkedSubnets.length > 0 && (
+                  <div className="favorite-group">
+                    <span className="favorite-group-title">网段</span>
+                    <div className="favorite-chips">
+                      {bookmarkedSubnets.slice(0, 8).map(subnet => (
+                        <button key={subnet.id} type="button" className="favorite-chip" onClick={() => onOpenSubnet(subnet.id)}>
+                          <span className="favorite-chip-icon"><GlobalOutlined /></span>
+                          <span className="favorite-chip-copy">
+                            <strong>{subnet.name}</strong>
+                            <small className="mono">{subnet.cidr} · 已用 {subnet.used}/{subnet.usable}</small>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="bookmark-empty"><StarOutlined /> 在资产、机柜或网段详情点击星标，收藏常用对象。</div>
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} lg={10}>
+          <Card
+            title="标签使用" size="small"
+            extra={<Button type="link" size="small" onClick={() => onGo('tags')}>管理标签</Button>}
+          >
+            {tags.some(tag => (tag.assetCount ?? 0) > 0)
+              ? <Chart option={tagOption} height={220} dark={dark} />
+              : <div className="dashboard-chart-empty"><Empty description="暂无标签数据" /></div>}
+          </Card>
+        </Col>
       </Row>
 
       <Row gutter={[16, 16]} className="dashboard-grid">

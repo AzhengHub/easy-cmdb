@@ -4,12 +4,16 @@ import {
   Select, Space, Statistic, Table, Tag,
 } from 'antd'
 import type { TableColumnsType } from 'antd'
-import { CloseOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
+import { CloseOutlined, DownOutlined, PlusOutlined, ReloadOutlined, RightOutlined, SearchOutlined, StarFilled, StarOutlined } from '@ant-design/icons'
 import { api, APIError } from '../api'
 import type { Asset, IPUsage, Subnet, SubnetDetail, SubnetFields } from '../api'
 
 interface Props {
   editable: boolean
+  openSubnetId: number | null
+  onSubnetOpened: () => void
+  bookmarkedSubnets: number[]
+  onToggleSubnetBookmark: (id: number) => void
   onSessionError: (error: unknown) => void
   onChanged: () => void
 }
@@ -29,7 +33,93 @@ function assetLabel(asset: Asset) {
   return `${asset.name}（${asset.kind === 'vm' ? '虚拟机' : asset.kind === 'switch' ? '交换机' : '物理机'}）`
 }
 
-export function IpamView({ editable, onSessionError, onChanged }: Props) {
+interface SubnetNode {
+  subnet: Subnet
+  children: SubnetNode[]
+  depth: number
+}
+
+interface SubnetRow {
+  subnet: Subnet
+  depth: number
+  children: number
+}
+
+function ipv4Number(address: string): number | null {
+  const parts = address.trim().split('.')
+  if (parts.length !== 4) return null
+  let value = 0
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return null
+    const octet = Number(part)
+    if (octet > 255) return null
+    value = value * 256 + octet
+  }
+  return value
+}
+
+function subnetRange(cidr: string): { start: number; end: number; prefix: number } | null {
+  const [address, prefixText] = cidr.trim().split('/')
+  if (!address || !prefixText) return null
+  const prefix = Number(prefixText)
+  if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32) return null
+  const ip = ipv4Number(address)
+  if (ip === null) return null
+  const size = 2 ** (32 - prefix)
+  const start = Math.floor(ip / size) * size
+  return { start, end: start + size - 1, prefix }
+}
+
+function buildSubnetTree(subnets: Subnet[]): SubnetNode[] {
+  const entries = subnets.map(subnet => ({ subnet, range: subnetRange(subnet.cidr) }))
+  entries.sort((left, right) => {
+    if (left.range && right.range) {
+      return left.range.prefix - right.range.prefix || left.range.start - right.range.start || left.subnet.name.localeCompare(right.subnet.name, 'zh-CN')
+    }
+    if (left.range) return -1
+    if (right.range) return 1
+    return left.subnet.name.localeCompare(right.subnet.name, 'zh-CN')
+  })
+
+  const nodes = new Map<number, SubnetNode>()
+  for (const entry of entries) nodes.set(entry.subnet.id, { subnet: entry.subnet, children: [], depth: 0 })
+  const roots: SubnetNode[] = []
+
+  for (const entry of entries) {
+    const node = nodes.get(entry.subnet.id)!
+    let parent: SubnetNode | undefined
+    if (entry.range) {
+      for (const candidateEntry of entries) {
+        if (candidateEntry.subnet.id === entry.subnet.id || !candidateEntry.range) continue
+        if (candidateEntry.range.prefix >= entry.range.prefix) continue
+        if (candidateEntry.range.start > entry.range.start || candidateEntry.range.end < entry.range.end) continue
+        const candidate = nodes.get(candidateEntry.subnet.id)!
+        if (!parent || candidateEntry.range.prefix > (subnetRange(parent.subnet.cidr)?.prefix ?? -1)) parent = candidate
+      }
+    }
+    if (parent) parent.children.push(node)
+    else roots.push(node)
+  }
+
+  function fillDepth(node: SubnetNode, depth: number) {
+    node.depth = depth
+    for (const child of node.children) fillDepth(child, depth + 1)
+  }
+  for (const root of roots) fillDepth(root, 0)
+  return roots
+}
+
+function flattenSubnetTree(nodes: SubnetNode[], collapsed: Set<number>): SubnetRow[] {
+  const rows: SubnetRow[] = []
+  function visit(node: SubnetNode) {
+    rows.push({ subnet: node.subnet, depth: node.depth, children: node.children.length })
+    if (!collapsed.has(node.subnet.id)) for (const child of node.children) visit(child)
+  }
+  for (const node of nodes) visit(node)
+  return rows
+}
+
+export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSubnets, onToggleSubnetBookmark, onSessionError, onChanged }: Props) {
   const [subnets, setSubnets] = useState<Subnet[]>([])
   const [assets, setAssets] = useState<Asset[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -37,12 +127,15 @@ export function IpamView({ editable, onSessionError, onChanged }: Props) {
   const [draft, setDraft] = useState<SubnetDraft | null>(null)
   const [allocation, setAllocation] = useState({ ip: '', assetId: 0, label: '', notes: '' })
   const [search, setSearch] = useState('')
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
 
   const selected = subnets.find(item => item.id === selectedId) ?? null
+  const subnetTree = useMemo(() => buildSubnetTree(subnets), [subnets])
+  const subnetRows = useMemo(() => flattenSubnetTree(subnetTree, collapsed), [subnetTree, collapsed])
   const usage = useMemo(() => {
     const query = search.trim().toLowerCase()
     const rows = detail?.usedIps ?? []
@@ -53,6 +146,11 @@ export function IpamView({ editable, onSessionError, onChanged }: Props) {
   const utilization = detail && detail.usable > 0 ? Math.min(100, Math.round(detail.used / detail.usable * 100)) : 0
 
   useEffect(() => { void load() }, [])
+
+  useEffect(() => {
+    if (openSubnetId == null) return
+    void load(openSubnetId).then(() => onSubnetOpened())
+  }, [openSubnetId])
 
   function report(e: unknown) {
     if (e instanceof APIError && e.status === 401) {
@@ -99,6 +197,15 @@ export function IpamView({ editable, onSessionError, onChanged }: Props) {
     } catch (e) {
       report(e)
     }
+  }
+
+  function toggleSubnet(id: number) {
+    setCollapsed(current => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   function addSubnet() {
@@ -259,15 +366,28 @@ export function IpamView({ editable, onSessionError, onChanged }: Props) {
       ) : (
         <div className="ipam-layout">
           <List
-            dataSource={subnets} split={false} className="subnet-list" loading={loading}
-            renderItem={item => (
+            dataSource={subnetRows} split={false} className="subnet-list" loading={loading}
+            renderItem={({ subnet: item, depth, children }) => (
               <List.Item
+                key={item.id}
                 className={`subnet-item${item.id === selectedId ? ' active' : ''}`}
+                style={{ paddingLeft: 10 + depth * 16 }}
                 onClick={() => void selectSubnet(item.id)}
               >
                 <div className="subnet-content">
                   <div className="subnet-head">
-                    <strong>{item.name}</strong>
+                    <Space size={2}>
+                      {children > 0 ? (
+                        <Button
+                          type="text" size="small" className="subnet-tree-toggle"
+                          aria-label={collapsed.has(item.id) ? '展开子网' : '收起子网'}
+                          icon={collapsed.has(item.id) ? <RightOutlined /> : <DownOutlined />}
+                          onClick={event => { event.stopPropagation(); toggleSubnet(item.id) }}
+                        />
+                      ) : <span className="subnet-tree-spacer" />}
+                      <strong>{item.name}</strong>
+                      {children > 0 && <span className="subnet-child-count">{children}</span>}
+                    </Space>
                     <Tag className="mono">{item.cidr}</Tag>
                   </div>
                   <span className="muted">VLAN {item.vlan || '—'} · 已用 {count(item.used)} / {count(item.usable)} · 空闲 {count(item.free)}</span>
@@ -285,14 +405,21 @@ export function IpamView({ editable, onSessionError, onChanged }: Props) {
                     <h2>{detail.name}</h2>
                     <span className="muted mono">{detail.cidr} · 网关 {detail.gateway || '—'} · VLAN {detail.vlan || '—'}</span>
                   </div>
-                  {editable && (
-                    <Space>
-                      <Button size="small" onClick={editSubnet}>编辑</Button>
-                      <Popconfirm title="确定删除该网段？" okText="删除" cancelText="取消" onConfirm={() => void deleteSubnet()}>
-                        <Button size="small" danger loading={busy}>删除</Button>
-                      </Popconfirm>
-                    </Space>
-                  )}
+                  <Space>
+                    <Button
+                      size="small"
+                      icon={bookmarkedSubnets.includes(detail.id) ? <StarFilled /> : <StarOutlined />}
+                      onClick={() => onToggleSubnetBookmark(detail.id)}
+                    >{bookmarkedSubnets.includes(detail.id) ? '已收藏' : '收藏'}</Button>
+                    {editable && (
+                      <>
+                        <Button size="small" onClick={editSubnet}>编辑</Button>
+                        <Popconfirm title="确定删除该网段？" okText="删除" cancelText="取消" onConfirm={() => void deleteSubnet()}>
+                          <Button size="small" danger loading={busy}>删除</Button>
+                        </Popconfirm>
+                      </>
+                    )}
+                  </Space>
                 </div>
                 {detail.notes && <p className="muted">{detail.notes}</p>}
 
