@@ -1,22 +1,44 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <title>Easy CMDB — Linkfold</title>
-  <desc>Two interlocking rounded links in gradient blue.</desc>
+  <desc>Two interlocking blue rings with dimensional highlights.</desc>
   <defs>
-    <linearGradient id="coral" x1="7" y1="5" x2="39" y2="43" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#7DD3FC"/>
-      <stop offset=".48" stop-color="#38A9F3"/>
-      <stop offset="1" stop-color="#1677D9"/>
+    <linearGradient id="upper-edge" x1="7" y1="5" x2="39" y2="43" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C4EEFF" />
+      <stop offset=".42" stop-color="#2195E8" />
+      <stop offset="1" stop-color="#0750A9" />
     </linearGradient>
-    <linearGradient id="raspberry" x1="28" y1="25" x2="58" y2="60" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#3795EA"/>
-      <stop offset=".58" stop-color="#2268C7"/>
-      <stop offset="1" stop-color="#18469C"/>
+    <linearGradient id="upper-surface" x1="9" y1="6" x2="37" y2="40" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B6E9FF" />
+      <stop offset=".28" stop-color="#5BC4FF" />
+      <stop offset=".65" stop-color="#228FE1" />
+      <stop offset="1" stop-color="#1469C6" />
+    </linearGradient>
+    <linearGradient id="lower-edge" x1="27" y1="24" x2="58" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#71C6FF" />
+      <stop offset=".5" stop-color="#1769C3" />
+      <stop offset="1" stop-color="#073270" />
+    </linearGradient>
+    <linearGradient id="lower-surface" x1="28" y1="25" x2="58" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#61BDFF" />
+      <stop offset=".37" stop-color="#2D8FE3" />
+      <stop offset=".73" stop-color="#1D66BF" />
+      <stop offset="1" stop-color="#12438F" />
     </linearGradient>
     <clipPath id="front-fold">
-      <path d="M0 0v64h64Z"/>
+      <path d="M0 0V64H64L38 38C36 37 35 34 33 32C32 31 31 30 30 30L0 0Z" />
     </clipPath>
+    <g id="upper-ring">
+      <rect x="10" y="10" width="26" height="26" rx="9" stroke="url(#upper-edge)" stroke-width="12" />
+      <rect x="10" y="10" width="26" height="26" rx="9" stroke="url(#upper-surface)" stroke-width="10.2" />
+      <path d="M10 22v-3a9 9 0 0 1 9-9h7" stroke="#F1FAFF" stroke-opacity=".58" stroke-width="1.8" stroke-linecap="round" />
+    </g>
+    <g id="lower-ring">
+      <rect x="28" y="28" width="26" height="26" rx="9" stroke="url(#lower-edge)" stroke-width="12" />
+      <rect x="28" y="28" width="26" height="26" rx="9" stroke="url(#lower-surface)" stroke-width="10.2" />
+      <path d="M35 54h10a9 9 0 0 0 9-9v-5" stroke="#082F70" stroke-opacity=".3" stroke-width="1.6" stroke-linecap="round" />
+    </g>
   </defs>
-  <rect x="10" y="10" width="26" height="26" rx="9" stroke="url(#coral)" stroke-width="12"/>
-  <rect x="28" y="28" width="26" height="26" rx="9" stroke="url(#raspberry)" stroke-width="12"/>
-  <rect x="10" y="10" width="26" height="26" rx="9" stroke="url(#coral)" stroke-width="12" clip-path="url(#front-fold)"/>
+  <use href="#upper-ring" />
+  <use href="#lower-ring" />
+  <use href="#upper-ring" clip-path="url(#front-fold)" />
 </svg>
