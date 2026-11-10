@@ -7,7 +7,7 @@ import {
 } from 'antd'
 import type { TableColumnsType } from 'antd'
 import {
-  ApartmentOutlined, ApiOutlined, CloudServerOutlined, DatabaseOutlined,
+  ApartmentOutlined, ApiOutlined, CloudServerOutlined,
   DesktopOutlined, DownloadOutlined, EditOutlined, GlobalOutlined, HistoryOutlined,
   HomeOutlined, LockOutlined, LogoutOutlined, MenuOutlined, MoonOutlined, PlusOutlined, ReloadOutlined,
   SearchOutlined, SettingOutlined, SunOutlined, UploadOutlined, UserOutlined,
@@ -23,6 +23,7 @@ import { ChangePassword } from './components/ChangePassword'
 import { Dashboard } from './components/Dashboard'
 import { FacilityView } from './components/FacilityView'
 import { IpamView } from './components/IpamView'
+import { Logo } from './components/Logo'
 
 const { Header, Sider, Content } = Layout
 
@@ -555,7 +556,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
       <div className="login-page">
         <ThemeToggle dark={dark} onToggleTheme={onToggleTheme} className="login-theme-toggle" />
         <Card className="login-card" variant="borderless">
-          <div className="login-brand"><DatabaseOutlined /> Easy CMDB</div>
+          <div className="login-brand"><Logo /> Easy CMDB</div>
           {error && <Alert type="error" showIcon message={error} className="login-alert" />}
           <Form layout="vertical" onFinish={login}>
             <Form.Item label="账号" name="username" rules={[{ required: true, message: '请输入账号' }]}>
@@ -605,7 +606,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
         breakpoint="lg" trigger={null} onCollapse={setCollapsed}
       >
         <div className="brand" onClick={() => goTo('home')}>
-          <DatabaseOutlined className="brand-icon" />
+          <Logo />
           <span>Easy CMDB</span>
         </div>
         <Menu

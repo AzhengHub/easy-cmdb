@@ -182,7 +182,9 @@ cp easy.db easy-cmdb.db
 
 ## 开发
 
-首次构建前端后，可用 `npm --prefix web run dev` 启动前端开发服务，它会把 `/api` 请求代理到本机 8080 的 Go 服务。Go 服务可用 `go run ./cmd/easy` 启动。`go test ./...` 检查 Go 包，`npm --prefix web run check` 执行 TypeScript 类型检查。
+每次代码改动通过相关检查后，默认按上面的 Linux 部署流程构建发布包，并通过已配置的 SSH 目标 `<dev-ssh-target>` 更新用户指定的远程开发主机。替换产物前先停止服务，保留远程已有的 `config.yaml` 和 SQLite 数据库，安装并启动后检查 `http://<dev-host>/healthz` 及本次改动的主要流程。真实连接信息和凭据只保存在受控且被 Git 忽略的本机配置中。
+
+默认不启动本机或 localhost 服务。仅在用户明确要求本地调试时，首次构建前端后可用 `npm --prefix web run dev` 启动前端开发服务，它会把 `/api` 请求代理到本机 8080 的 Go 服务；Go 服务可用 `go run ./cmd/easy` 启动，调试结束后停止。`go test ./...` 检查 Go 包，`npm --prefix web run check` 执行 TypeScript 类型检查。
 
 表结构在 `internal/cmdb/schema.sql`，首次启动时自动执行。项目仍在开发阶段，修改表结构后删除本地 `easy.db` 并重启即可重建，不需要迁移文件。
 

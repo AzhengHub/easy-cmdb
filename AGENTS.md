@@ -38,6 +38,8 @@ Easy CMDB 用于集中管理企业 IT 资产、配置和资产关系，面向约
 
 ## 开发环境交付
 
-- 每次代码改动完成并通过相关检查后，交付前在本仓库重新构建并启动 Web 服务：运行 `go build -trimpath -o bin/easy ./cmd/easy`（Windows 为 `bin/easy.exe`），再以本机 `config.yaml`（如果存在）启动 `bin/easy serve`。
-- 更新沿用开发环境已有的 SQLite 数据库文件。
-- 构建并启动后，使用本机配置的访问地址检查 `/healthz`，验证本次改动的入口或主要流程，并在交付时说明开发环境验证结果。
+- 每次代码改动完成并通过相关检查后，交付前构建 `web/dist` 和目标架构的 Linux Go 二进制，按 README 的 Linux 部署流程，将 `easy`、`dist/` 和 `scripts/install.sh` 组成发布包，部署到用户指定且已配置的远程开发主机。
+- 更新沿用远程开发环境已有的 `config.yaml` 和 SQLite 数据库，不用本地配置或数据库覆盖；替换产物前先停止服务，再安装并启动。
+- 部署后使用已配置的远程访问地址检查 `/healthz`，验证本次改动的入口或主要流程，并在交付时说明远程开发环境验证结果。
+- 默认不再启动本机或 localhost Web 服务；仅在用户明确要求本地调试时临时启用，调试结束后停止。
+- 部署目标从本机 Git 忽略的 `.tools/deploy/config.yaml` 读取（`ssh_target`、`base_url`），沿用已有的 SSH 免密配置。目标地址、SSH 连接信息和凭据只保存在受控的本机配置中；仓库文档和示例只使用占位符。

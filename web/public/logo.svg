@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Easy CMDB — Linkfold</title>
+  <desc>Two interlocking rounded links in amber, coral and raspberry.</desc>
+  <defs>
+    <linearGradient id="coral" x1="7" y1="5" x2="39" y2="43" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFBD62"/>
+      <stop offset=".48" stop-color="#FF805A"/>
+      <stop offset="1" stop-color="#F45A69"/>
+    </linearGradient>
+    <linearGradient id="raspberry" x1="28" y1="25" x2="58" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F45A79"/>
+      <stop offset=".58" stop-color="#DC3B78"/>
+      <stop offset="1" stop-color="#B92570"/>
+    </linearGradient>
+    <clipPath id="front-fold">
+      <path d="M0 0v64h64Z"/>
+    </clipPath>
+  </defs>
+  <rect x="10" y="10" width="26" height="26" rx="9" stroke="url(#coral)" stroke-width="12"/>
+  <rect x="28" y="28" width="26" height="26" rx="9" stroke="url(#raspberry)" stroke-width="12"/>
+  <rect x="10" y="10" width="26" height="26" rx="9" stroke="url(#coral)" stroke-width="12" clip-path="url(#front-fold)"/>
+</svg>
