@@ -79,7 +79,7 @@ function messageText(error: unknown) {
 
 function initialDark() {
   try {
-    const saved = localStorage.getItem('easy-cmdb-theme')
+    const saved = localStorage.getItem('linkcmdb-theme')
     if (saved === 'dark') return true
     if (saved === 'light') return false
     return window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -107,7 +107,7 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
     try {
-      localStorage.setItem('easy-cmdb-theme', dark ? 'dark' : 'light')
+      localStorage.setItem('linkcmdb-theme', dark ? 'dark' : 'light')
     } catch {
       // Storage may be unavailable in private browsing.
     }
@@ -170,7 +170,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultAssetColumns)
   const [pagination, setPagination] = useState(1)
   const [pageSize, setPageSize] = useState(() => {
-    const stored = Number(localStorage.getItem('easy-cmdb-page-size'))
+    const stored = Number(localStorage.getItem('linkcmdb-page-size'))
     return [10, 20, 50].includes(stored) ? stored : defaultPageSize
   })
   const [importing, setImporting] = useState(false)
@@ -190,7 +190,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   const [allTags, setAllTags] = useState<TagItem[]>([])
   const [bookmarks, setBookmarks] = useState<number[]>(() => {
     try {
-      const parsed: unknown = JSON.parse(localStorage.getItem('easy-cmdb-bookmarks') ?? '[]')
+      const parsed: unknown = JSON.parse(localStorage.getItem('linkcmdb-bookmarks') ?? '[]')
       return Array.isArray(parsed) ? parsed.filter((id): id is number => typeof id === 'number') : []
     } catch {
       return []
@@ -198,7 +198,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   })
   const [rackBookmarks, setRackBookmarks] = useState<number[]>(() => {
     try {
-      const parsed: unknown = JSON.parse(localStorage.getItem('easy-cmdb-rack-bookmarks') ?? '[]')
+      const parsed: unknown = JSON.parse(localStorage.getItem('linkcmdb-rack-bookmarks') ?? '[]')
       return Array.isArray(parsed) ? parsed.filter((id): id is number => typeof id === 'number') : []
     } catch {
       return []
@@ -206,7 +206,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   })
   const [subnetBookmarks, setSubnetBookmarks] = useState<number[]>(() => {
     try {
-      const parsed: unknown = JSON.parse(localStorage.getItem('easy-cmdb-subnet-bookmarks') ?? '[]')
+      const parsed: unknown = JSON.parse(localStorage.getItem('linkcmdb-subnet-bookmarks') ?? '[]')
       return Array.isArray(parsed) ? parsed.filter((id): id is number => typeof id === 'number') : []
     } catch {
       return []
@@ -334,7 +334,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
   useEffect(() => {
     try {
-      localStorage.setItem('easy-cmdb-bookmarks', JSON.stringify(bookmarks))
+      localStorage.setItem('linkcmdb-bookmarks', JSON.stringify(bookmarks))
     } catch {
       // Bookmarks still work for this session when storage is unavailable.
     }
@@ -342,8 +342,8 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
   useEffect(() => {
     try {
-      localStorage.setItem('easy-cmdb-rack-bookmarks', JSON.stringify(rackBookmarks))
-      localStorage.setItem('easy-cmdb-subnet-bookmarks', JSON.stringify(subnetBookmarks))
+      localStorage.setItem('linkcmdb-rack-bookmarks', JSON.stringify(rackBookmarks))
+      localStorage.setItem('linkcmdb-subnet-bookmarks', JSON.stringify(subnetBookmarks))
     } catch {
       // Favorites still work for this session when storage is unavailable.
     }
@@ -351,7 +351,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
   useEffect(() => {
     try {
-      localStorage.setItem('easy-cmdb-page-size', String(pageSize))
+      localStorage.setItem('linkcmdb-page-size', String(pageSize))
     } catch {
       // Page size still applies for this session when storage is unavailable.
     }
@@ -366,7 +366,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
     setFilterOpen(false)
     setFilterName('')
     try {
-      const raw = localStorage.getItem('easy-cmdb-filters:' + page)
+      const raw = localStorage.getItem('linkcmdb-filters:' + page)
       const parsed: unknown = raw ? JSON.parse(raw) : []
       if (Array.isArray(parsed)) {
         setFilterPresets(parsed.filter((item): item is AssetFilterPreset => (
@@ -377,7 +377,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
       setFilterPresets([])
     }
     try {
-      const raw = localStorage.getItem('easy-cmdb-columns:' + page)
+      const raw = localStorage.getItem('linkcmdb-columns:' + page)
       const parsed: unknown = raw ? JSON.parse(raw) : null
       const valid = Array.isArray(parsed)
         ? parsed.filter((key): key is string => typeof key === 'string' && assetColumnKeys.includes(key))
@@ -696,7 +696,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
   function persistFilterPresets(next: AssetFilterPreset[]) {    setFilterPresets(next)
     try {
-      localStorage.setItem('easy-cmdb-filters:' + page, JSON.stringify(next))
+      localStorage.setItem('linkcmdb-filters:' + page, JSON.stringify(next))
     } catch {
       // Storage can be unavailable in private browsing; the in-memory list still works.
     }
@@ -743,7 +743,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
     const ordered = assetColumnKeys.filter(key => keys.includes(key))
     setVisibleColumns(ordered)
     try {
-      localStorage.setItem('easy-cmdb-columns:' + page, JSON.stringify(ordered))
+      localStorage.setItem('linkcmdb-columns:' + page, JSON.stringify(ordered))
     } catch {
       // Keep the current in-memory column selection.
     }
@@ -803,7 +803,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
   function downloadImportErrors() {
     if (!importPreview?.errors.length) return
-    downloadCSV('easy-cmdb-import-errors.csv', [
+    downloadCSV('linkcmdb-import-errors.csv', [
       ['行号', '错误说明'],
       ...importPreview.errors.map(error => [error.row, error.message]),
     ])
@@ -821,11 +821,11 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
         asset.tags?.map(tag => tag.name).join('; ') ?? '',
       ])
     }
-    downloadCSV('easy-cmdb-assets.csv', rows)
+    downloadCSV('linkcmdb-assets.csv', rows)
   }
 
   function downloadTemplate() {
-    downloadCSV('easy-cmdb-import-template.csv', [[
+    downloadCSV('linkcmdb-import-template.csv', [[
       '资源名称', '类型', '平台', '状态', '生命周期', '地址 / IP', 'CPU', '内存 MiB', '负责人', '环境', '备注', '扩展属性', '标签',
     ]])
   }

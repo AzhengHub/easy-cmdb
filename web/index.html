@@ -7,7 +7,7 @@
     <link rel="icon" type="image/svg+xml" href="/logo.svg?v=linkfold-3d-2" sizes="any" />
     <script>
       try {
-        const saved = localStorage.getItem('easy-cmdb-theme');
+        const saved = localStorage.getItem('linkcmdb-theme');
         const dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
         document.documentElement.dataset.theme = dark ? 'dark' : 'light';
         document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#141414' : '#f5f5f5');

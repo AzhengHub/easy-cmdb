@@ -35,7 +35,7 @@ go.work.sum
 # Local toolchain and build files
 /.tools/
 /bin/
-/easy
+/linkcmdb
 
 # Local SQLite databases
 /.data/
@@ -51,7 +51,7 @@ npm-debug.log*
 /demo-data/
 *.dump
 /backups/
-/easy-cmdb-assets.csv
+/linkcmdb-assets.csv
 
 # Local temporary files
 /tmp/
