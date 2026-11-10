@@ -9,7 +9,7 @@ import type { TableColumnsType } from 'antd'
 import {
   ApartmentOutlined, ApiOutlined, CloudServerOutlined,
   DesktopOutlined, DownloadOutlined, EditOutlined, GlobalOutlined, HistoryOutlined,
-  HomeOutlined, LockOutlined, LogoutOutlined, MenuOutlined, MoonOutlined, PlusOutlined, ReloadOutlined,
+  HomeOutlined, LockOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoonOutlined, PlusOutlined, ReloadOutlined,
   SearchOutlined, SettingOutlined, SunOutlined, UploadOutlined, UserOutlined,
 } from '@ant-design/icons'
 import { api, apiCSV, APIError } from './api'
@@ -616,7 +616,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
         <div className="brand">
           <span className="brand-word" onClick={() => goTo('home')}><Wordmark /></span>
           <Button
-            className="brand-collapse" type="text" icon={<MenuOutlined />}
+            className="brand-collapse" type="text" icon={<MenuFoldOutlined />}
             aria-label="收起菜单" onClick={() => setCollapsed(true)}
           />
         </div>
@@ -637,7 +637,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
         <Header className="app-header">
           <Space>
             {collapsed && (
-              <Button type="text" onClick={() => setCollapsed(false)} aria-label="展开菜单"><MenuOutlined /></Button>
+              <Button type="text" onClick={() => setCollapsed(false)} aria-label="展开菜单"><MenuUnfoldOutlined /></Button>
             )}
           </Space>
           <Space size={4}>
