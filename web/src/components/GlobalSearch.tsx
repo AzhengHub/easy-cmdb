@@ -4,7 +4,7 @@ import { Input, Spin } from 'antd'
 import type { InputRef } from 'antd'
 import {
   ApartmentOutlined, ClusterOutlined, CloudServerOutlined, GlobalOutlined,
-  SearchOutlined, AimOutlined, TagsOutlined,
+  SearchOutlined, AimOutlined, TagsOutlined, HistoryOutlined,
 } from '@ant-design/icons'
 import { api } from '../api'
 import type { SearchResult, SearchResultType } from '../api'
@@ -15,6 +15,7 @@ interface Props {
   onRack: (roomId: number, rackId: number) => void
   onIpam: () => void
   onTag: () => void
+  onSearchAll: (query: string) => void
 }
 
 const typeMeta: Record<SearchResultType, { label: string; icon: ReactNode }> = {
@@ -33,13 +34,21 @@ const statusLabels: Record<string, string> = {
 
 const typeOrder: SearchResultType[] = ['asset', 'tag', 'ip', 'room', 'rack', 'subnet']
 
-export function GlobalSearch({ onAsset, onRoom, onRack, onIpam, onTag }: Props) {
+export function GlobalSearch({ onAsset, onRoom, onRack, onIpam, onTag, onSearchAll }: Props) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const [error, setError] = useState('')
+  const [recent, setRecent] = useState<string[]>(() => {
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem('easy-cmdb-recent-searches') ?? '[]')
+      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string').slice(0, 6) : []
+    } catch {
+      return []
+    }
+  })
   const inputRef = useRef<InputRef>(null)
   const requestRef = useRef(0)
 
@@ -86,7 +95,45 @@ export function GlobalSearch({ onAsset, onRoom, onRack, onIpam, onTag }: Props) 
     return () => window.clearTimeout(timer)
   }, [query])
 
+  function rememberSearch(term: string) {
+    const value = term.trim()
+    if (value.length < 2) return
+    const next = [value, ...recent.filter(item => item.toLowerCase() !== value.toLowerCase())].slice(0, 6)
+    setRecent(next)
+    try {
+      localStorage.setItem('easy-cmdb-recent-searches', JSON.stringify(next))
+    } catch {
+      // Recent searches still work for this session.
+    }
+  }
+
+  function runRecent(term: string) {
+    setQuery(term)
+    setOpen(true)
+    inputRef.current?.focus()
+  }
+
+  function clearRecent() {
+    setRecent([])
+    try {
+      localStorage.removeItem('easy-cmdb-recent-searches')
+    } catch {
+      // Ignore unavailable storage.
+    }
+  }
+
+  function searchAll() {
+    const term = query.trim()
+    if (!term) return
+    rememberSearch(term)
+    setOpen(false)
+    setQuery('')
+    setResults([])
+    onSearchAll(term)
+  }
+
   function choose(result: SearchResult) {
+    rememberSearch(query)
     setOpen(false)
     setQuery('')
     setResults([])
@@ -125,7 +172,7 @@ export function GlobalSearch({ onAsset, onRoom, onRack, onIpam, onTag }: Props) 
     return result.detail
   }
 
-  const visible = open && query.trim().length >= 2
+  const visible = open && (query.trim().length >= 2 || (!query.trim() && recent.length > 0))
   const grouped = typeOrder
     .map(type => ({ type, items: results.filter(result => result.type === type) }))
     .filter(group => group.items.length > 0)
@@ -141,41 +188,63 @@ export function GlobalSearch({ onAsset, onRoom, onRack, onIpam, onTag }: Props) 
         autoComplete="off"
         suffix={<kbd className="global-search-kbd">Ctrl K</kbd>}
         onChange={event => {
-          setQuery(event.target.value)
-          setOpen(event.target.value.trim().length >= 2)
+          const value = event.target.value
+          setQuery(value)
+          setOpen(value.trim().length >= 2 || value.trim().length === 0)
         }}
-        onFocus={() => { if (query.trim().length >= 2) setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
         onBlur={() => window.setTimeout(() => setOpen(false), 120)}
         onKeyDown={handleKeyDown}
       />
       {visible && (
         <div className="global-search-panel" onMouseDown={event => event.preventDefault()}>
-          {loading && <div className="global-search-state"><Spin size="small" /> 搜索中…</div>}
-          {!loading && error && <div className="global-search-state">{error}</div>}
-          {!loading && !error && results.length === 0 && <div className="global-search-state">没有匹配结果</div>}
-          {!loading && !error && grouped.map(group => (
-            <div key={group.type} className="global-search-group">
-              <div className="global-search-group-title">{typeMeta[group.type].label}</div>
-              {group.items.map(result => {
-                const index = flat.findIndex(item => item.type === result.type && item.id === result.id)
-                return (
-                  <button
-                    key={`${result.type}-${result.id}`} type="button"
-                    className={`global-search-result${index === active ? ' active' : ''}`}
-                    onMouseEnter={() => setActive(index)}
-                    onClick={() => choose(result)}
-                  >
-                    <span className="global-search-icon">{typeMeta[result.type].icon}</span>
-                    <span className="global-search-copy">
-                      <strong>{result.label}</strong>
-                      <span>{resultDetail(result)}</span>
-                    </span>
-                    <span className="global-search-type">{typeMeta[result.type].label}</span>
+          {!query.trim() ? (
+            <>
+              <div className="global-search-group">
+                <div className="global-search-group-title">最近搜索</div>
+                {recent.map(term => (
+                  <button key={term} type="button" className="global-search-recent" onClick={() => runRecent(term)}>
+                    <HistoryOutlined />
+                    <span>{term}</span>
                   </button>
-                )
-              })}
-            </div>
-          ))}
+                ))}
+              </div>
+              <button type="button" className="global-search-clear" onClick={clearRecent}>清空最近搜索</button>
+            </>
+          ) : (
+            <>
+              {loading && <div className="global-search-state"><Spin size="small" /> 搜索中…</div>}
+              {!loading && error && <div className="global-search-state">{error}</div>}
+              {!loading && !error && results.length === 0 && <div className="global-search-state">没有匹配结果</div>}
+              {!loading && !error && grouped.map(group => (
+                <div key={group.type} className="global-search-group">
+                  <div className="global-search-group-title">{typeMeta[group.type].label}</div>
+                  {group.items.map(result => {
+                    const index = flat.findIndex(item => item.type === result.type && item.id === result.id)
+                    return (
+                      <button
+                        key={`${result.type}-${result.id}`} type="button"
+                        className={`global-search-result${index === active ? ' active' : ''}`}
+                        onMouseEnter={() => setActive(index)}
+                        onClick={() => choose(result)}
+                      >
+                        <span className="global-search-icon">{typeMeta[result.type].icon}</span>
+                        <span className="global-search-copy">
+                          <strong>{result.label}</strong>
+                          <span>{resultDetail(result)}</span>
+                        </span>
+                        <span className="global-search-type">{typeMeta[result.type].label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              ))}
+              <div className="global-search-footer">
+                <button type="button" onClick={searchAll}>在全部资产中搜索「{query.trim()}」</button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

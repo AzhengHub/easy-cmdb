@@ -205,7 +205,7 @@ export function Dashboard({ assets, subnets, facilities, changes, bookmarks, rac
     <div>
       <Row gutter={[16, 16]} className="metric-row">
         {[
-          { label: '资产总数', value: stats.active.length, icon: <HddOutlined />, hint: '在册资产', target: undefined },
+          { label: '资产总数', value: stats.active.length, icon: <HddOutlined />, hint: '在册资产', target: 'assets' as Page },
           { label: '物理机', value: stats.hosts.length, icon: <CloudServerOutlined />, hint: '独立主机与虚拟化节点', target: 'host' as Page },
           { label: '虚拟机', value: stats.vms.length, icon: <DesktopOutlined />, hint: `${stats.running} 台运行中`, target: 'vm' as Page },
           { label: '交换机', value: stats.switches.length, icon: <SwapOutlined />, hint: '网络设备', target: 'switch' as Page },

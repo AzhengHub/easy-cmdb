@@ -6,10 +6,11 @@ import {
   Space, Spin, Table, Tabs, Tag, Tooltip, Upload, theme,
 } from 'antd'
 import type { TableColumnsType } from 'antd'
+import zhCN from 'antd/locale/zh_CN'
 import {
   ApartmentOutlined, ApiOutlined, CloudServerOutlined,
   DeleteOutlined, DesktopOutlined, DownloadOutlined, EditOutlined, FilterOutlined, GlobalOutlined, HistoryOutlined,
-  HomeOutlined, LockOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoonOutlined, PlusOutlined, ReloadOutlined,
+  HddOutlined, HomeOutlined, LockOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoonOutlined, PlusOutlined, ReloadOutlined,
   SearchOutlined, SettingOutlined, StarFilled, StarOutlined, SunOutlined, TagsOutlined, UploadOutlined, UserOutlined,
 } from '@ant-design/icons'
 import { api, apiCSV, APIError } from './api'
@@ -49,7 +50,7 @@ const statuses: Record<string, { label: string; color: string }> = {
 const relations: { kind: LinkKind; from: Kind; to: Kind[]; outgoing: string; incoming: string }[] = [
   { kind: 'hosts', from: 'host', to: ['vm'], outgoing: '承载虚拟机', incoming: '所在宿主机' },
 ]
-const pageSize = 10
+const defaultPageSize = 10
 const defaultAssetColumns = ['name', 'kind', 'status', 'tags', 'meta', 'address', 'owner', 'actions']
 const assetColumnKeys = ['name', 'kind', 'status', 'tags', 'meta', 'address', 'owner', 'environment', 'capacity', 'updated', 'actions']
 
@@ -115,6 +116,7 @@ export default function App() {
 
   return (
     <ConfigProvider
+      locale={zhCN}
       theme={{
         algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
@@ -167,6 +169,10 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   const [filterOpen, setFilterOpen] = useState(false)
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultAssetColumns)
   const [pagination, setPagination] = useState(1)
+  const [pageSize, setPageSize] = useState(() => {
+    const stored = Number(localStorage.getItem('easy-cmdb-page-size'))
+    return [10, 20, 50].includes(stored) ? stored : defaultPageSize
+  })
   const [importing, setImporting] = useState(false)
   const [previewing, setPreviewing] = useState(false)
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
@@ -227,6 +233,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
   const navigation: (NavLeaf | NavGroup)[] = [
     { key: 'home', label: '首页', icon: <HomeOutlined /> },
+    { key: 'assets', label: '全部资产', icon: <HddOutlined /> },
     { key: 'host', label: '物理机', icon: <CloudServerOutlined /> },
     { key: 'vm', label: '虚拟机', icon: <DesktopOutlined /> },
     { key: 'switch', label: '交换机', icon: <ApiOutlined /> },
@@ -246,7 +253,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   const selectedRoom = facilities.rooms.find(room => room.id === facilityRoomId)
   const pageTitle = page === 'facilities' ? (selectedRoom?.name ?? '数据中心') : activePage.label
   const editable = user?.role !== 'viewer'
-  const assetPage = page === 'host' || page === 'vm' || page === 'switch'
+  const assetPage = page === 'assets' || page === 'host' || page === 'vm' || page === 'switch'
 
   const byId = useMemo(() => new Map(assets.map(asset => [asset.id, asset])), [assets])
   const locations = useMemo(() => assetLocations(facilities, links), [facilities, links])
@@ -265,6 +272,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   }, [links])
 
   const scoped = useMemo(() => {
+    if (page === 'assets') return assets
     if (page === 'home' || page === 'changes' || page === 'password' || page === 'facilities' || page === 'ipam') return []
     return assets.filter(asset => asset.kind === page)
   }, [assets, page])
@@ -342,8 +350,16 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   }, [rackBookmarks, subnetBookmarks])
 
   useEffect(() => {
+    try {
+      localStorage.setItem('easy-cmdb-page-size', String(pageSize))
+    } catch {
+      // Page size still applies for this session when storage is unavailable.
+    }
+  }, [pageSize])
+
+  useEffect(() => {
     setSelectedAssetIds([])
-  }, [page, keyword, platformFilter, lifecycleFilter, statusFilter, tagFilter, tagFilterMode, pagination])
+  }, [page, keyword, platformFilter, lifecycleFilter, statusFilter, tagFilter, tagFilterMode, pageSize, pagination])
 
   useEffect(() => {
     if (!assetPage) return
@@ -580,6 +596,17 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   function openSubnet(id: number) {
     setIpamSubnetId(id)
     goTo('ipam')
+  }
+
+  function showTagAssets(tagId: number) {
+    goTo('assets')
+    setTagFilter([tagId])
+    setTagFilterMode('all')
+  }
+
+  function searchAllAssets(term: string) {
+    goTo('assets')
+    setKeyword(term)
   }
 
   function openBulkTags() {
@@ -845,6 +872,9 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
     return link.fromId === selectedId ? link.toId : link.fromId
   }
 
+  const metaTitle = page === 'vm' ? '宿主机' : page === 'assets' ? '宿主机 / 平台' : '平台'
+  const metaValue = (asset: Asset) => page === 'vm' || (page === 'assets' && asset.kind === 'vm')
+    ? hostName(asset) : platformLabel(asset)
   const assetColumns: { key: string; label: string; column: TableColumnsType<Asset>[number] }[] = [
     {
       key: 'name', label: '资源名称',
@@ -874,13 +904,22 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
         title: '标签', key: 'tags', width: 180,
         sorter: (left, right) => (left.tags?.map(tag => tag.name).join(' ') ?? '').localeCompare(right.tags?.map(tag => tag.name).join(' ') ?? '', 'zh-CN'),
         render: (_, asset) => asset.tags?.length
-          ? <Space size={2} wrap>{asset.tags.slice(0, 3).map(tag => <Tag key={tag.id} color={tag.color}>{tag.name}</Tag>)}</Space>
+          ? (
+              <Space size={2} wrap>
+                {asset.tags.slice(0, 3).map(tag => <Tag key={tag.id} color={tag.color}>{tag.name}</Tag>)}
+                {asset.tags.length > 3 && (
+                  <Tooltip title={asset.tags.slice(3).map(tag => tag.name).join('、')}>
+                    <Tag>+{asset.tags.length - 3}</Tag>
+                  </Tooltip>
+                )}
+              </Space>
+            )
           : '—',
       },
     },
     {
-      key: 'meta', label: page === 'vm' ? '宿主机' : '平台',
-      column: { title: page === 'vm' ? '宿主机' : '平台', key: 'meta', width: 130, sorter: (left, right) => (page === 'vm' ? hostName(left) : platformLabel(left)).localeCompare(page === 'vm' ? hostName(right) : platformLabel(right), 'zh-CN'), render: (_, asset) => page === 'vm' ? hostName(asset) : platformLabel(asset) },
+      key: 'meta', label: metaTitle,
+      column: { title: metaTitle, key: 'meta', width: 130, sorter: (left, right) => metaValue(left).localeCompare(metaValue(right), 'zh-CN'), render: (_, asset) => metaValue(asset) },
     },
     {
       key: 'address', label: '地址 / IP',
@@ -1063,10 +1102,11 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
               }}
               onIpam={() => goTo('ipam')}
               onTag={() => goTo('tags')}
+              onSearchAll={searchAllAssets}
             />
           </div>
           <Space size={6}>
-            {(page === 'host' || page === 'vm' || page === 'switch') && editable && (
+            {(page === 'assets' || page === 'host' || page === 'vm' || page === 'switch') && editable && (
               <Button type="primary" size="small" onClick={startNew}><PlusOutlined /> 新增资产</Button>
             )}
             <ThemeToggle dark={dark} onToggleTheme={onToggleTheme} />
@@ -1100,7 +1140,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
             <Card variant="borderless" title="变更记录"><ChangeList changes={changes} onOpen={id => void openAsset(id)} /></Card>
           )}
 
-          {page === 'tags' && <TagManager editable={editable} onSessionError={e => handleError(e)} onChanged={setAllTags} />}
+          {page === 'tags' && <TagManager editable={editable} onSessionError={e => handleError(e)} onChanged={setAllTags} onShowAssets={showTagAssets} />}
 
           {page === 'password' && <ChangePassword onSubmit={changePassword} />}
 
@@ -1126,7 +1166,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
             />
           )}
 
-          {(page === 'host' || page === 'vm' || page === 'switch') && (
+          {(page === 'assets' || page === 'host' || page === 'vm' || page === 'switch') && (
             <Card
               variant="borderless"
               title={<Space><span>{activePage.label}列表</span><Tag>{filtered.length} 条</Tag></Space>}
@@ -1251,8 +1291,16 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
                   onChange: keys => setSelectedAssetIds(keys.map(Number)),
                 } : undefined}
                 pagination={{
-                  current: pagination, pageSize, total: filtered.length, showSizeChanger: false,
-                  showTotal: total => `共 ${total} 条`, onChange: setPagination,
+                  current: pagination, pageSize, total: filtered.length, showSizeChanger: true, pageSizeOptions: ['10', '20', '50'],
+                  showTotal: total => `共 ${total} 条`,
+                  onChange: (page, size) => {
+                    if (size !== pageSize) {
+                      setPageSize(size)
+                      setPagination(1)
+                    } else {
+                      setPagination(page)
+                    }
+                  },
                 }}
               />
             </Card>

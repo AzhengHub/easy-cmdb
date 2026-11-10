@@ -11,6 +11,7 @@ interface Props {
   editable: boolean
   onSessionError: (error: unknown) => void
   onChanged?: (tags: TagItem[]) => void
+  onShowAssets?: (tagId: number) => void
 }
 
 const colorPresets = [
@@ -24,7 +25,7 @@ const colorPresets = [
   { value: '#8c8c8c', label: '灰色' },
 ]
 
-export function TagManager({ editable, onSessionError, onChanged }: Props) {
+export function TagManager({ editable, onSessionError, onChanged, onShowAssets }: Props) {
   const [tags, setTags] = useState<TagItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -109,7 +110,9 @@ export function TagManager({ editable, onSessionError, onChanged }: Props) {
     { title: '说明', dataIndex: 'description', key: 'description', render: value => value || '—' },
     {
       title: '关联资产', dataIndex: 'assetCount', key: 'assetCount', width: 110,
-      render: value => <span className="mono">{value ?? 0}</span>,
+      render: (_value, tag) => tag.assetCount ? (
+        <Button type="link" size="small" onClick={() => onShowAssets?.(tag.id)}>{tag.assetCount}</Button>
+      ) : <span className="mono">0</span>,
     },
     ...(editable ? [{
       title: '', key: 'actions', width: 130,
