@@ -378,3 +378,54 @@ func uniquePositiveIDs(ids []int64) []int64 {
 	}
 	return out
 }
+func importTagMap(ctx context.Context, q queryer) (map[string]int64, error) {
+	rows, err := q.QueryContext(ctx, "SELECT id, name FROM tags")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	lookup := make(map[string]int64)
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		lookup[strings.ToLower(name)] = id
+	}
+	return lookup, rows.Err()
+}
+
+func resolveImportTags(names []string, lookup map[string]int64) ([]int64, []string) {
+	ids := make([]int64, 0, len(names))
+	missing := make([]string, 0)
+	for _, name := range names {
+		id, ok := lookup[strings.ToLower(name)]
+		if !ok {
+			missing = append(missing, name)
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids, missing
+}
+
+func attachImportedTags(ctx context.Context, tx *sql.Tx, asset Asset, tagIDs []int64, actor string) error {
+	if len(tagIDs) == 0 {
+		return nil
+	}
+	for _, tagID := range tagIDs {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO asset_tags (asset_id,tag_id) VALUES ($1,$2)", asset.ID, tagID); err != nil {
+			return err
+		}
+	}
+	tags, err := assetTags(ctx, tx, asset.ID)
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		names = append(names, tag.Name)
+	}
+	return writeChange(ctx, tx, asset, actor, "tags", []string{}, names)
+}

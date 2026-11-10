@@ -28,6 +28,8 @@ type ImportResult struct {
 type importRow struct {
 	number int
 	fields Fields
+	tags   []string
+	tagIDs []int64
 }
 
 var importHeaderAliases = map[string]string{
@@ -43,6 +45,7 @@ var importHeaderAliases = map[string]string{
 	"环境": "environment", "environment": "environment",
 	"备注": "notes", "notes": "notes",
 	"扩展属性": "attributes", "属性": "attributes", "attributes": "attributes",
+	"标签": "tags", "tag": "tags", "tags": "tags",
 }
 
 var importKinds = map[string]string{
@@ -89,14 +92,28 @@ func ImportAssets(ctx context.Context, db *sql.DB, source io.Reader, actor strin
 	if err != nil {
 		return ImportResult{}, err
 	}
-	for _, row := range rows {
+	tagLookup, err := importTagMap(ctx, tx)
+	if err != nil {
+		return ImportResult{}, err
+	}
+	for i := range rows {
+		row := &rows[i]
 		if existing[strings.ToLower(row.fields.Name)] {
 			return ImportResult{}, fmt.Errorf("%w: 第 %d 行：资产名称 %q 已存在", ErrInvalid, row.number, row.fields.Name)
 		}
+		ids, missing := resolveImportTags(row.tags, tagLookup)
+		if len(missing) > 0 {
+			return ImportResult{}, fmt.Errorf("%w: 第 %d 行：标签不存在：%s", ErrInvalid, row.number, strings.Join(missing, "、"))
+		}
+		row.tagIDs = ids
 	}
 	for _, row := range rows {
-		if _, err := createAsset(ctx, tx, row.fields, actor); err != nil {
+		asset, err := createAsset(ctx, tx, row.fields, actor)
+		if err != nil {
 			return ImportResult{}, fmt.Errorf("导入第 %d 行: %w", row.number, err)
+		}
+		if err := attachImportedTags(ctx, tx, asset, row.tagIDs, actor); err != nil {
+			return ImportResult{}, fmt.Errorf("导入第 %d 行标签: %w", row.number, err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -111,18 +128,19 @@ type ImportRowError struct {
 }
 
 type ImportPreviewRow struct {
-	Row         int    `json:"row"`
-	Name        string `json:"name"`
-	Kind        string `json:"kind"`
-	Platform    string `json:"platform"`
-	Status      string `json:"status"`
-	Lifecycle   string `json:"lifecycle"`
-	Address     string `json:"address"`
-	CPU         int    `json:"cpu"`
-	MemoryMiB   int64  `json:"memoryMiB"`
-	Owner       string `json:"owner"`
-	Environment string `json:"environment"`
-	Notes       string `json:"notes"`
+	Row         int      `json:"row"`
+	Name        string   `json:"name"`
+	Kind        string   `json:"kind"`
+	Platform    string   `json:"platform"`
+	Status      string   `json:"status"`
+	Lifecycle   string   `json:"lifecycle"`
+	Address     string   `json:"address"`
+	CPU         int      `json:"cpu"`
+	MemoryMiB   int64    `json:"memoryMiB"`
+	Owner       string   `json:"owner"`
+	Environment string   `json:"environment"`
+	Notes       string   `json:"notes"`
+	Tags        []string `json:"tags"`
 }
 
 type ImportPreview struct {
@@ -149,7 +167,7 @@ func PreviewImport(ctx context.Context, db *sql.DB, source io.Reader) (ImportPre
 		}
 		preview.Rows++
 		rowNumber := i + 2
-		fields, err := decodeImportRow(record, columns, rowNumber)
+		fields, tags, err := decodeImportRow(record, columns, rowNumber)
 		if err != nil {
 			if len(preview.Errors) < 200 {
 				preview.Errors = append(preview.Errors, ImportRowError{Row: rowNumber, Message: importErrorMessage(err, rowNumber)})
@@ -166,7 +184,7 @@ func PreviewImport(ctx context.Context, db *sql.DB, source io.Reader) (ImportPre
 			continue
 		}
 		seen[nameKey] = rowNumber
-		validRows = append(validRows, importRow{number: rowNumber, fields: fields})
+		validRows = append(validRows, importRow{number: rowNumber, fields: fields, tags: tags})
 	}
 	if preview.Rows == 0 {
 		return ImportPreview{}, fmt.Errorf("%w: CSV 中没有可导入的数据", ErrInvalid)
@@ -179,12 +197,25 @@ func PreviewImport(ctx context.Context, db *sql.DB, source io.Reader) (ImportPre
 	if err != nil {
 		return ImportPreview{}, err
 	}
+	tagLookup, err := importTagMap(ctx, db)
+	if err != nil {
+		return ImportPreview{}, err
+	}
 	valid := make([]importRow, 0, len(validRows))
 	for _, row := range validRows {
 		if existing[strings.ToLower(row.fields.Name)] {
 			if len(preview.Errors) < 200 {
 				preview.Errors = append(preview.Errors, ImportRowError{
 					Row: row.number, Message: fmt.Sprintf("资产名称 %q 已存在", row.fields.Name),
+				})
+			}
+			continue
+		}
+		_, missing := resolveImportTags(row.tags, tagLookup)
+		if len(missing) > 0 {
+			if len(preview.Errors) < 200 {
+				preview.Errors = append(preview.Errors, ImportRowError{
+					Row: row.number, Message: "标签不存在：" + strings.Join(missing, "、"),
 				})
 			}
 			continue
@@ -203,6 +234,7 @@ func PreviewImport(ctx context.Context, db *sql.DB, source io.Reader) (ImportPre
 			Platform: row.fields.Platform, Status: row.fields.Status, Lifecycle: row.fields.Lifecycle,
 			Address: row.fields.Address, CPU: row.fields.CPU, MemoryMiB: row.fields.MemoryMiB,
 			Owner: row.fields.Owner, Environment: row.fields.Environment, Notes: row.fields.Notes,
+			Tags: row.tags,
 		})
 	}
 	return preview, nil
@@ -266,7 +298,7 @@ func parseImportFile(source io.Reader) ([]importRow, error) {
 			continue
 		}
 		rowNumber := i + 2
-		fields, err := decodeImportRow(record, columns, rowNumber)
+		fields, tags, err := decodeImportRow(record, columns, rowNumber)
 		if err != nil {
 			return nil, err
 		}
@@ -275,7 +307,7 @@ func parseImportFile(source io.Reader) ([]importRow, error) {
 			return nil, fmt.Errorf("%w: 第 %d 行：资源名称与第 %d 行重复", ErrInvalid, rowNumber, previous)
 		}
 		seen[nameKey] = rowNumber
-		rows = append(rows, importRow{number: rowNumber, fields: fields})
+		rows = append(rows, importRow{number: rowNumber, fields: fields, tags: tags})
 	}
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("%w: CSV 中没有可导入的数据", ErrInvalid)
@@ -320,7 +352,7 @@ func importRecordEmpty(record []string) bool {
 	return true
 }
 
-func decodeImportRow(record []string, columns map[string]int, rowNumber int) (Fields, error) {
+func decodeImportRow(record []string, columns map[string]int, rowNumber int) (Fields, []string, error) {
 	value := func(key string) string {
 		index, ok := columns[key]
 		if !ok || index >= len(record) {
@@ -332,11 +364,11 @@ func decodeImportRow(record []string, columns map[string]int, rowNumber int) (Fi
 	rawKind := value("kind")
 	kind, ok := importKinds[strings.ToLower(rawKind)]
 	if !ok {
-		return Fields{}, importRowError(rowNumber, "资源类型 %q 无效，可用：物理机、虚拟机、交换机", rawKind)
+		return Fields{}, nil, importRowError(rowNumber, "资源类型 %q 无效，可用：物理机、虚拟机、交换机", rawKind)
 	}
 	name := value("name")
 	if name == "" {
-		return Fields{}, importRowError(rowNumber, "资源名称不能为空")
+		return Fields{}, nil, importRowError(rowNumber, "资源名称不能为空")
 	}
 
 	rawPlatform := value("platform")
@@ -345,7 +377,7 @@ func decodeImportRow(record []string, columns map[string]int, rowNumber int) (Fi
 	}
 	platform, ok := importPlatforms[strings.ToLower(rawPlatform)]
 	if !ok {
-		return Fields{}, importRowError(rowNumber, "平台 %q 无效，可用：Proxmox VE、KVM 或留空", rawPlatform)
+		return Fields{}, nil, importRowError(rowNumber, "平台 %q 无效，可用：Proxmox VE、KVM 或留空", rawPlatform)
 	}
 
 	rawStatus := value("status")
@@ -358,7 +390,7 @@ func decodeImportRow(record []string, columns map[string]int, rowNumber int) (Fi
 	if rawStatus != "" {
 		status, ok = importStatuses[strings.ToLower(rawStatus)]
 		if !ok {
-			return Fields{}, importRowError(rowNumber, "状态 %q 无效", rawStatus)
+			return Fields{}, nil, importRowError(rowNumber, "状态 %q 无效", rawStatus)
 		}
 	}
 
@@ -370,24 +402,29 @@ func decodeImportRow(record []string, columns map[string]int, rowNumber int) (Fi
 	if rawLifecycle != "" {
 		lifecycle, ok = importLifecycles[strings.ToLower(rawLifecycle)]
 		if !ok {
-			return Fields{}, importRowError(rowNumber, "生命周期 %q 无效，可用：在册、已退役", rawLifecycle)
+			return Fields{}, nil, importRowError(rowNumber, "生命周期 %q 无效，可用：在册、已退役", rawLifecycle)
 		}
 	}
 
 	cpu, err := importInt(value("cpu"), "CPU", rowNumber, 32)
 	if err != nil {
-		return Fields{}, err
+		return Fields{}, nil, err
 	}
 	memory, err := importInt(value("memory"), "内存 MiB", rowNumber, 64)
 	if err != nil {
-		return Fields{}, err
+		return Fields{}, nil, err
 	}
 	attributes := value("attributes")
 	if attributes == "" {
 		attributes = "{}"
 	}
 	if !json.Valid([]byte(attributes)) || !strings.HasPrefix(attributes, "{") {
-		return Fields{}, importRowError(rowNumber, "扩展属性须为 JSON 对象，例如 {\"位置\":\"A01\"}")
+		return Fields{}, nil, importRowError(rowNumber, "扩展属性须为 JSON 对象，例如 {\"位置\":\"A01\"}")
+	}
+
+	tags, err := parseImportTags(value("tags"), rowNumber)
+	if err != nil {
+		return Fields{}, nil, err
 	}
 
 	fields := Fields{
@@ -396,9 +433,40 @@ func decodeImportRow(record []string, columns map[string]int, rowNumber int) (Fi
 		CPU: int(cpu), MemoryMiB: memory, Notes: value("notes"), Attributes: json.RawMessage(attributes),
 	}
 	if err := validateFields(&fields); err != nil {
-		return Fields{}, importRowError(rowNumber, "%s", err)
+		return Fields{}, nil, importRowError(rowNumber, "%s", err)
 	}
-	return fields, nil
+	return fields, tags, nil
+}
+
+func parseImportTags(raw string, rowNumber int) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == '，' || r == ';' || r == '；'
+	})
+	seen := make(map[string]bool, len(parts))
+	tags := make([]string, 0, len(parts))
+	for _, part := range parts {
+		name := strings.TrimSpace(part)
+		if name == "" {
+			continue
+		}
+		if utf8.RuneCountInString(name) > 80 {
+			return nil, importRowError(rowNumber, "标签名称不能超过 80 个字符")
+		}
+		key := strings.ToLower(name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		tags = append(tags, name)
+	}
+	if len(tags) > 20 {
+		return nil, importRowError(rowNumber, "单条资产最多关联 20 个标签")
+	}
+	return tags, nil
 }
 
 func importInt(value, label string, rowNumber, bits int) (int64, error) {

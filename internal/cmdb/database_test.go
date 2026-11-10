@@ -296,6 +296,58 @@ func TestPreviewImport(t *testing.T) {
 	}
 }
 
+func TestImportTags(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	if _, err := SaveTag(ctx, db, 0, TagFields{Name: "生产", Color: "#1677ff"}); err != nil {
+		t.Fatalf("create tag: %v", err)
+	}
+	if _, err := SaveTag(ctx, db, 0, TagFields{Name: "核心", Color: "#f5222d"}); err != nil {
+		t.Fatalf("create tag: %v", err)
+	}
+
+	missing := strings.NewReader("资源名称,类型,标签\nimport-tag-01,虚拟机,生产; 不存在\n")
+	preview, err := PreviewImport(ctx, db, missing)
+	if err != nil {
+		t.Fatalf("preview tags: %v", err)
+	}
+	if preview.Valid != 0 || len(preview.Errors) != 1 {
+		t.Fatalf("missing tag preview = %+v", preview)
+	}
+	if _, err := ImportAssets(ctx, db, strings.NewReader("资源名称,类型,标签\nimport-tag-01,虚拟机,不存在\n"), "tester"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("missing tag import = %v, want ErrInvalid", err)
+	}
+
+	csv := strings.NewReader("资源名称,类型,标签\nimport-tag-01,虚拟机,生产; 核心\nimport-tag-02,物理机,\n")
+	preview, err = PreviewImport(ctx, db, csv)
+	if err != nil {
+		t.Fatalf("valid preview: %v", err)
+	}
+	if preview.Valid != 2 || len(preview.Errors) != 0 || len(preview.Sample) != 2 {
+		t.Fatalf("valid preview = %+v", preview)
+	}
+	if len(preview.Sample[0].Tags) != 2 || preview.Sample[0].Tags[0] != "生产" {
+		t.Fatalf("preview tags = %+v", preview.Sample[0].Tags)
+	}
+	result, err := ImportAssets(ctx, db, strings.NewReader("资源名称,类型,标签\nimport-tag-01,虚拟机,生产; 核心\nimport-tag-02,物理机,\n"), "tester")
+	if err != nil || result.Imported != 2 {
+		t.Fatalf("import tags = %+v, %v", result, err)
+	}
+	assets, err := ListAssets(ctx, db)
+	if err != nil {
+		t.Fatalf("list assets: %v", err)
+	}
+	var tagged Asset
+	for _, asset := range assets {
+		if asset.Name == "import-tag-01" {
+			tagged = asset
+		}
+	}
+	if tagged.ID == 0 || len(tagged.Tags) != 2 {
+		t.Fatalf("imported tags = %+v", tagged.Tags)
+	}
+}
+
 func TestUsers(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
