@@ -127,6 +127,7 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
   const [draft, setDraft] = useState<SubnetDraft | null>(null)
   const [allocation, setAllocation] = useState({ ip: '', assetId: 0, label: '', notes: '' })
   const [search, setSearch] = useState('')
+  const [subnetSearch, setSubnetSearch] = useState('')
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -136,6 +137,13 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
   const selected = subnets.find(item => item.id === selectedId) ?? null
   const subnetTree = useMemo(() => buildSubnetTree(subnets), [subnets])
   const subnetRows = useMemo(() => flattenSubnetTree(subnetTree, collapsed), [subnetTree, collapsed])
+  const visibleSubnetRows = useMemo(() => {
+    const query = subnetSearch.trim().toLowerCase()
+    if (!query) return subnetRows
+    return subnetRows
+      .filter(row => [row.subnet.name, row.subnet.cidr, row.subnet.gateway, row.subnet.vlan].some(value => value?.toLowerCase().includes(query)))
+      .map(row => ({ ...row, depth: 0, children: 0 }))
+  }, [subnetRows, subnetSearch])
   const usage = useMemo(() => {
     const query = search.trim().toLowerCase()
     const rows = detail?.usedIps ?? []
@@ -365,8 +373,14 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
         <Empty description="暂无网段，新增一个网段开始管理 IP 地址" />
       ) : (
         <div className="ipam-layout">
-          <List
-            dataSource={subnetRows} split={false} className="subnet-list" loading={loading}
+          <div className="subnet-pane">
+            <Input
+              allowClear prefix={<SearchOutlined />} placeholder="搜索名称、CIDR、VLAN"
+              value={subnetSearch} onChange={event => setSubnetSearch(event.target.value)}
+            />
+            <List
+              dataSource={visibleSubnetRows} split={false} className="subnet-list" loading={loading}
+              locale={{ emptyText: '没有匹配的网段' }}
             renderItem={({ subnet: item, depth, children }) => (
               <List.Item
                 key={item.id}
@@ -396,6 +410,7 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
               </List.Item>
             )}
           />
+          </div>
 
           <div className="subnet-detail">
             {detail ? (

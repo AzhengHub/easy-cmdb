@@ -233,6 +233,7 @@ html[data-theme="dark"] .change-field ins { color: #73d13d; }
 /* IPAM */
 .ipam-alert { margin-bottom: 12px; }
 .ipam-layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 18px; }
+.subnet-pane { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .subnet-list { border: 1px solid var(--line); border-radius: 8px; padding: 8px; max-height: 720px; overflow: auto; }
 .subnet-item { cursor: pointer; padding: 10px; border-radius: 6px; }
 .subnet-item:hover { background: var(--hover); }
