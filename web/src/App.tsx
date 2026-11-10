@@ -635,12 +635,16 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
       <Layout>
         <Header className="app-header">
-          <Space>
+          <div className="app-header-title">
             {collapsed && (
               <Button type="text" onClick={() => setCollapsed(false)} aria-label="展开菜单"><MenuUnfoldOutlined /></Button>
             )}
-          </Space>
-          <Space size={4}>
+            <h1>{pageTitle}</h1>
+          </div>
+          <Space size={6}>
+            {(page === 'host' || page === 'vm' || page === 'switch') && editable && (
+              <Button type="primary" size="small" onClick={startNew}><PlusOutlined /> 新增资产</Button>
+            )}
             <ThemeToggle dark={dark} onToggleTheme={onToggleTheme} />
             <Tooltip title="刷新">
               <Button type="text" loading={busy} onClick={() => void loadAll()}><ReloadOutlined /></Button>
@@ -657,15 +661,6 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
         </Header>
 
         <Content className="app-content">
-          <div className="page-header">
-            <div>
-              <h1>{pageTitle}</h1>
-            </div>
-            {(page === 'host' || page === 'vm' || page === 'switch') && editable && (
-              <Button type="primary" onClick={startNew}><PlusOutlined /> 新增资产</Button>
-            )}
-          </div>
-
           {error && <Alert type="error" showIcon closable message={error} className="page-alert" onClose={() => setError('')} />}
 
           {page === 'home' && (

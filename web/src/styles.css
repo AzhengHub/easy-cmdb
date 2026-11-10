@@ -123,9 +123,10 @@ a { color: var(--primary); }
 .app-header { height: 56px; padding: 0 16px; background: var(--surface) !important; color: var(--text); border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
 .app-header.ant-layout-header { line-height: normal; }
 .app-header .ant-btn { color: var(--muted); }
-.app-content { padding: 24px; min-height: calc(100vh - 56px); }
-.page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
-.page-header h1 { font-size: 22px; font-weight: 600; line-height: 1.35; }
+.app-header .ant-btn-primary { color: #fff; }
+.app-header-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.app-header-title h1 { margin: 0; overflow: hidden; color: var(--text); font-size: 18px; font-weight: 600; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
+.app-content { padding: 20px 24px 24px; min-height: calc(100vh - 56px); }
 .page-alert { margin-bottom: 16px; }
 .metric-row { margin-bottom: 16px; }
 .metric-card { cursor: pointer; height: 100%; }
@@ -370,7 +371,6 @@ html[data-theme="dark"] .login-card .ant-input-outlined:not(:hover):not(:focus-w
 }
 @media (max-width: 768px) {
   .app-content { padding: 16px; }
-  .page-header { flex-direction: column; align-items: stretch; }
   .app-header { padding-inline: 8px; }
 }
 
