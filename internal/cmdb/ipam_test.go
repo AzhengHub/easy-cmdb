@@ -78,8 +78,9 @@ func TestIPAM(t *testing.T) {
 		t.Fatalf("out-of-subnet allocation error = %v, want ErrInvalid", err)
 	}
 
-	if _, err := SaveSubnet(ctx, db, 0, SubnetFields{Name: "重叠", CIDR: "192.168.10.128/25"}, 0, "tester"); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("overlapping subnet error = %v, want ErrInvalid", err)
+	nested, err := SaveSubnet(ctx, db, 0, SubnetFields{Name: "办公网子网", CIDR: "192.168.10.0/25"}, 0, "tester")
+	if err != nil {
+		t.Fatalf("nested subnet should be allowed: %v", err)
 	}
 	second, err := SaveSubnet(ctx, db, 0, SubnetFields{Name: "服务器网", CIDR: "192.168.20.0/24"}, 0, "tester")
 	if err != nil {
@@ -94,6 +95,9 @@ func TestIPAM(t *testing.T) {
 	}
 	if err := DeleteSubnet(ctx, db, subnet.ID, subnet.Version, "tester"); err != nil {
 		t.Fatalf("delete subnet: %v", err)
+	}
+	if err := DeleteSubnet(ctx, db, nested.ID, nested.Version, "tester"); err != nil {
+		t.Fatalf("delete nested subnet: %v", err)
 	}
 	if err := DeleteSubnet(ctx, db, second.ID, second.Version, "tester"); err != nil {
 		t.Fatalf("delete second subnet: %v", err)

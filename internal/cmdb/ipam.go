@@ -588,6 +588,18 @@ func checkSubnetOverlap(ctx context.Context, q queryer, id int64, prefix netip.P
 			return err
 		}
 		if prefix.Overlaps(other) {
+			// CIDR blocks are either disjoint or nested. Allow a parent prefix
+			// to aggregate child prefixes (NetBox-style prefix hierarchy), but
+			// still reject the same prefix twice.
+			if prefix.Addr() == other.Addr() && prefix.Bits() == other.Bits() {
+				return invalidFacility(fmt.Sprintf("网段 %s 已存在", otherCIDR))
+			}
+			if prefix.Bits() < other.Bits() && prefix.Contains(other.Addr()) {
+				continue
+			}
+			if other.Bits() < prefix.Bits() && other.Contains(prefix.Addr()) {
+				continue
+			}
 			return invalidFacility(fmt.Sprintf("网段与已有网段 %s 重叠", otherCIDR))
 		}
 	}
