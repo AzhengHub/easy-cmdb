@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# Easy CMDB installer for Linux + systemd.
+# LinkCMDB installer for Linux + systemd.
 #
 # Expected bundle layout:
 #   install.sh
-#   easy
+#   linkcmdb
 #   dist/
 #
 # Usage:
 #   sudo APP_PORT=80 ./install.sh
 #   sudo APP_PORT=80 UPDATE_LISTEN=1 ./install.sh
 #
-# The installer is idempotent. Existing /opt/easy-cmdb/config.yaml and
-# /opt/easy-cmdb/data/easy.db are preserved unless UPDATE_LISTEN=1 changes the
+# The installer is idempotent. Existing /opt/linkcmdb/config.yaml and
+# /opt/linkcmdb/data/linkcmdb.db are preserved unless UPDATE_LISTEN=1 changes the
 # listen line.
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/opt/easy-cmdb}"
-APP_USER="${APP_USER:-easy-cmdb}"
+APP_DIR="${APP_DIR:-/opt/linkcmdb}"
+APP_USER="${APP_USER:-linkcmdb}"
 APP_PORT="${APP_PORT:-80}"
-SERVICE_NAME="easy-cmdb.service"
+SERVICE_NAME="linkcmdb.service"
 BUNDLE_DIR="${BUNDLE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
@@ -32,7 +32,7 @@ fail() {
 }
 
 [ "$(id -u)" -eq 0 ] || fail "请使用 root 运行"
-[ -f "$BUNDLE_DIR/easy" ] || fail "缺少二进制文件: $BUNDLE_DIR/easy"
+[ -f "$BUNDLE_DIR/linkcmdb" ] || fail "缺少二进制文件: $BUNDLE_DIR/linkcmdb"
 [ -f "$BUNDLE_DIR/dist/index.html" ] || fail "缺少前端目录: $BUNDLE_DIR/dist"
 [[ "$APP_PORT" =~ ^[0-9]+$ ]] && [ "$APP_PORT" -ge 1 ] && [ "$APP_PORT" -le 65535 ] || fail "APP_PORT 无效"
 [ "$APP_DIR" != "/" ] || fail "APP_DIR 不能是 /"
@@ -45,7 +45,7 @@ fi
 install -d -o root -g root -m 0755 "$APP_DIR" "$APP_DIR/bin" "$APP_DIR/web"
 install -d -o "$APP_USER" -g "$APP_USER" -m 0700 "$APP_DIR/data"
 
-install -m 0755 "$BUNDLE_DIR/easy" "$APP_DIR/bin/easy"
+install -m 0755 "$BUNDLE_DIR/linkcmdb" "$APP_DIR/bin/linkcmdb"
 rm -rf "$APP_DIR/web/dist"
 cp -a "$BUNDLE_DIR/dist" "$APP_DIR/web/dist"
 chown -R root:root "$APP_DIR/bin" "$APP_DIR/web"
@@ -61,9 +61,9 @@ if [ ! -f "$APP_DIR/config.yaml" ]; then
   [ "${#ADMIN_PASSWORD}" -ge 12 ] || fail "管理员密码至少 12 个字符"
 
   cat > "$APP_DIR/config.yaml" <<EOF
-# Easy CMDB deployment configuration
+# LinkCMDB deployment configuration
 listen: 0.0.0.0:${APP_PORT}
-database: ${APP_DIR}/data/easy.db
+database: ${APP_DIR}/data/linkcmdb.db
 web_dir: ${APP_DIR}/web/dist
 cookie_secure: ${COOKIE_SECURE}
 
@@ -94,7 +94,7 @@ fi
 
 cat > "/etc/systemd/system/$SERVICE_NAME" <<UNIT
 [Unit]
-Description=Easy CMDB
+Description=LinkCMDB
 After=network-online.target
 Wants=network-online.target
 
@@ -103,7 +103,7 @@ Type=simple
 User=${APP_USER}
 Group=${APP_USER}
 WorkingDirectory=${APP_DIR}
-ExecStart=${APP_DIR}/bin/easy serve
+ExecStart=${APP_DIR}/bin/linkcmdb serve
 Restart=on-failure
 RestartSec=3
 UMask=0077
@@ -158,10 +158,10 @@ else
 fi
 
 echo
-echo "Easy CMDB installed"
+echo "LinkCMDB installed"
 echo "  URL:     ${APP_URL}"
 echo "  Service: $SERVICE_NAME"
-echo "  Data:    $APP_DIR/data/easy.db"
+echo "  Data:    $APP_DIR/data/linkcmdb.db"
 if [ "$FIRST_INSTALL" = "1" ]; then
   echo "  Admin:   $ADMIN_USERNAME"
   echo "  Password: $ADMIN_PASSWORD"
