@@ -14,7 +14,7 @@ import (
 
 func testDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := Open(filepath.Join(t.TempDir(), "easy.db"))
+	db, err := Open(filepath.Join(t.TempDir(), "linkcmdb.db"))
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}

@@ -32,7 +32,7 @@ type Config struct {
 func Default() Config {
 	return Config{
 		Listen:   "127.0.0.1:8080",
-		Database: "easy.db",
+		Database: "linkcmdb.db",
 		WebDir:   "web/dist",
 		Admin:    Account{Username: "admin"},
 	}

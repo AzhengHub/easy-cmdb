@@ -1,7 +1,7 @@
 # 复制为 config.yaml 后修改；config.yaml 已被 Git 忽略。
 # 以下都是默认值，不创建 config.yaml 也能直接运行。
 listen: 127.0.0.1:8080
-database: easy.db
+database: linkcmdb.db
 web_dir: web/dist
 cookie_secure: false
 

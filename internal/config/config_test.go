@@ -15,7 +15,7 @@ func TestLoadMissingUsesDefaults(t *testing.T) {
 	if found {
 		t.Fatal("missing config reported as found")
 	}
-	if cfg.Listen != "127.0.0.1:8080" || cfg.Database != "easy.db" || cfg.WebDir != "web/dist" {
+	if cfg.Listen != "127.0.0.1:8080" || cfg.Database != "linkcmdb.db" || cfg.WebDir != "web/dist" {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 	if cfg.Admin.Username != "admin" || cfg.Admin.Password != "" {
@@ -70,7 +70,7 @@ func TestLoadPartialKeepsDefaults(t *testing.T) {
 	if !found {
 		t.Fatal("config file not reported as found")
 	}
-	if cfg.Listen != "127.0.0.1:9091" || cfg.Database != "easy.db" || cfg.WebDir != "web/dist" {
+	if cfg.Listen != "127.0.0.1:9091" || cfg.Database != "linkcmdb.db" || cfg.WebDir != "web/dist" {
 		t.Fatalf("defaults were not preserved: %+v", cfg)
 	}
 	if cfg.Admin.Username != "admin" {
