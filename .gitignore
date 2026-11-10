@@ -52,3 +52,6 @@ npm-debug.log*
 *.dump
 /backups/
 /easy-cmdb-assets.csv
+
+# Local temporary files
+/tmp/
