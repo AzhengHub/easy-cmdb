@@ -56,11 +56,16 @@ func Initialize(ctx context.Context, db *sql.DB) error {
 		"SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='assets')").Scan(&initialized); err != nil {
 		return err
 	}
-	if initialized {
-		return tx.Commit()
+	if !initialized {
+		if _, err := tx.ExecContext(ctx, schemaSQL); err != nil {
+			return fmt.Errorf("初始化表结构: %w", err)
+		}
 	}
-	if _, err := tx.ExecContext(ctx, schemaSQL); err != nil {
-		return fmt.Errorf("初始化表结构: %w", err)
+	// Tag tables were added after the initial schema. Running the idempotent
+	// DDL keeps existing databases upgrade-safe without a separate migration
+	// tool or overwriting any data.
+	if err := ensureTagSchema(ctx, tx); err != nil {
+		return fmt.Errorf("初始化标签表: %w", err)
 	}
 	return tx.Commit()
 }

@@ -129,3 +129,20 @@ CREATE TABLE rack_placements (
 );
 
 CREATE INDEX rack_placements_rack_idx ON rack_placements (rack_id, start_u);
+CREATE TABLE tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
+    color TEXT NOT NULL DEFAULT '#1677ff',
+    description TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE UNIQUE INDEX tags_name_idx ON tags (lower(name));
+
+CREATE TABLE asset_tags (
+    asset_id INTEGER NOT NULL REFERENCES assets ON DELETE CASCADE,
+    tag_id INTEGER NOT NULL REFERENCES tags ON DELETE CASCADE,
+    PRIMARY KEY (asset_id, tag_id)
+);
+
+CREATE INDEX asset_tags_tag_idx ON asset_tags (tag_id);

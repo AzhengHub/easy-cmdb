@@ -37,6 +37,7 @@ type Asset struct {
 	LastSeenAt   *time.Time      `json:"lastSeenAt,omitempty"`
 	MissingCount int             `json:"missingCount"`
 	Observed     json.RawMessage `json:"observed"`
+	Tags         []Tag           `json:"tags"`
 }
 
 type Link struct {
@@ -85,14 +86,38 @@ func ListAssets(ctx context.Context, db *sql.DB) ([]Asset, error) {
 	defer rows.Close()
 
 	assets := make([]Asset, 0)
+	byID := make(map[int64]int)
 	for rows.Next() {
 		asset, err := readAsset(rows)
 		if err != nil {
 			return nil, err
 		}
+		asset.Tags = make([]Tag, 0)
 		assets = append(assets, asset)
+		byID[asset.ID] = len(assets) - 1
 	}
-	return assets, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	tagRows, err := db.QueryContext(ctx, `
+		SELECT at.asset_id, t.id, t.name, t.color, t.description
+		FROM asset_tags at JOIN tags t ON t.id = at.tag_id
+		ORDER BY lower(t.name), t.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer tagRows.Close()
+	for tagRows.Next() {
+		var assetID int64
+		var tag Tag
+		if err := tagRows.Scan(&assetID, &tag.ID, &tag.Name, &tag.Color, &tag.Description); err != nil {
+			return nil, err
+		}
+		if index, ok := byID[assetID]; ok {
+			assets[index].Tags = append(assets[index].Tags, tag)
+		}
+	}
+	return assets, tagRows.Err()
 }
 
 func ListLinks(ctx context.Context, db *sql.DB, assetID int64) ([]Link, error) {

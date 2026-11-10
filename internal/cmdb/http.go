@@ -40,6 +40,12 @@ func NewServer(db *sql.DB, secureCookie bool, frontend http.Handler) http.Handle
 		respond(w, http.StatusOK, currentUser(r))
 	}))
 	mux.HandleFunc("GET /api/assets", s.requireUser(false, s.listAssets))
+	mux.HandleFunc("GET /api/tags", s.requireUser(false, s.listTags))
+	mux.HandleFunc("POST /api/tags", s.requireUser(true, s.saveTag))
+	mux.HandleFunc("PUT /api/tags/{id}", s.requireUser(true, s.saveTag))
+	mux.HandleFunc("DELETE /api/tags/{id}", s.requireUser(true, s.deleteTag))
+	mux.HandleFunc("GET /api/assets/{id}/tags", s.requireUser(false, s.listAssetTags))
+	mux.HandleFunc("PUT /api/assets/{id}/tags", s.requireUser(true, s.setAssetTags))
 	mux.HandleFunc("POST /api/assets", s.requireUser(true, s.saveAsset))
 	mux.HandleFunc("POST /api/assets/import", s.requireUser(true, s.importAssets))
 	mux.HandleFunc("PUT /api/assets/{id}", s.requireUser(true, s.saveAsset))
@@ -75,6 +81,89 @@ func (s *Server) listAssets(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, http.StatusOK, assets)
 }
+
+
+func (s *Server) listTags(w http.ResponseWriter, r *http.Request) {
+	tags, err := ListTags(r.Context(), s.db)
+	if err != nil {
+		s.databaseError(w, err)
+		return
+	}
+	respond(w, http.StatusOK, tags)
+}
+
+
+func (s *Server) saveTag(w http.ResponseWriter, r *http.Request) {
+	var id int64
+	if r.Method == http.MethodPut {
+		var ok bool
+		id, ok = pathID(w, r)
+		if !ok {
+			return
+		}
+	}
+	var fields TagFields
+	if err := decode(w, r, &fields); err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	tag, err := SaveTag(r.Context(), s.db, id, fields)
+	if err != nil {
+		s.databaseError(w, err)
+		return
+	}
+	status := http.StatusOK
+	if id == 0 {
+		status = http.StatusCreated
+	}
+	respond(w, status, tag)
+}
+
+func (s *Server) deleteTag(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	if err := DeleteTag(r.Context(), s.db, id); err != nil {
+		s.databaseError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) listAssetTags(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	tags, err := ListAssetTags(r.Context(), s.db, id)
+	if err != nil {
+		s.databaseError(w, err)
+		return
+	}
+	respond(w, http.StatusOK, tags)
+}
+
+func (s *Server) setAssetTags(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	var input struct {
+		TagIDs []int64 `json:"tagIds"`
+	}
+	if err := decode(w, r, &input); err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	tags, err := SetAssetTags(r.Context(), s.db, id, input.TagIDs, currentUser(r).Username)
+	if err != nil {
+		s.databaseError(w, err)
+		return
+	}
+	respond(w, http.StatusOK, tags)
+}
+
 
 func (s *Server) saveAsset(w http.ResponseWriter, r *http.Request) {
 	var id int64
