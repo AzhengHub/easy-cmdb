@@ -801,15 +801,24 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
+  function downloadImportErrors() {
+    if (!importPreview?.errors.length) return
+    downloadCSV('easy-cmdb-import-errors.csv', [
+      ['行号', '错误说明'],
+      ...importPreview.errors.map(error => [error.row, error.message]),
+    ])
+  }
+
   function exportCSV() {
     const rows: (string | number)[][] = [[
-      '资源名称', '类型', '平台', '状态', '生命周期', '地址 / IP', 'CPU', '内存 MiB', '负责人', '环境', '备注', '扩展属性',
+      '资源名称', '类型', '平台', '状态', '生命周期', '地址 / IP', 'CPU', '内存 MiB', '负责人', '环境', '备注', '扩展属性', '标签',
     ]]
     for (const asset of filtered) {
       rows.push([
         asset.name, kinds[asset.kind].label, platformLabel(asset), statusOf(asset).label,
         asset.lifecycle === 'retired' ? '已退役' : '在册', asset.address, asset.cpu, asset.memoryMiB,
         asset.owner, asset.environment, asset.notes, JSON.stringify(asset.attributes),
+        asset.tags?.map(tag => tag.name).join('; ') ?? '',
       ])
     }
     downloadCSV('easy-cmdb-assets.csv', rows)
@@ -817,7 +826,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
   function downloadTemplate() {
     downloadCSV('easy-cmdb-import-template.csv', [[
-      '资源名称', '类型', '平台', '状态', '生命周期', '地址 / IP', 'CPU', '内存 MiB', '负责人', '环境', '备注', '扩展属性',
+      '资源名称', '类型', '平台', '状态', '生命周期', '地址 / IP', 'CPU', '内存 MiB', '负责人', '环境', '备注', '扩展属性', '标签',
     ]])
   }
 
@@ -1309,9 +1318,12 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
       </Layout>
 
       <Modal
-        open={!!importPreview} title="CSV 导入预检" width={780}
+        open={!!importPreview} title="CSV 导入预检" width={940}
         footer={(
-          <Space>
+          <Space wrap>
+            {importPreview?.errors.length ? (
+              <Button icon={<DownloadOutlined />} onClick={downloadImportErrors}>下载错误报告</Button>
+            ) : null}
             <Button disabled={importing} onClick={() => { setImportPreview(null); setPendingImport(null) }}>取消</Button>
             <Button
               type="primary" loading={importing}
@@ -1348,7 +1360,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
             {importPreview.sample.length > 0 && (
               <Table
                 rowKey="row" size="small" pagination={false} dataSource={importPreview.sample}
-                scroll={{ x: 680 }}
+                scroll={{ x: 'max-content' }}
                 columns={[
                   { title: '行', dataIndex: 'row', width: 56 },
                   { title: '资源名称', dataIndex: 'name', width: 150 },
@@ -1357,6 +1369,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
                   { title: '生命周期', dataIndex: 'lifecycle', width: 90, render: value => value === 'retired' ? '已退役' : '在册' },
                   { title: '负责人', dataIndex: 'owner', width: 110, render: value => value || '—' },
                   { title: '地址 / IP', dataIndex: 'address', width: 140, render: value => <span className="mono">{value || '—'}</span> },
+                  { title: '标签', dataIndex: 'tags', width: 150, render: value => Array.isArray(value) && value.length ? value.join('; ') : '—' },
                 ]}
               />
             )}

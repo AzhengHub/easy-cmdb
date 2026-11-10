@@ -90,6 +90,7 @@ export interface ImportPreviewRow {
   owner: string
   environment: string
   notes: string
+  tags: string[]
 }
 
 export interface ImportRowError {
