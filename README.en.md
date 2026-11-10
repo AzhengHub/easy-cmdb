@@ -83,8 +83,10 @@ viewer:
 
 The `系统管理` section contains:
 
-- **Change history**: review changes to assets, relationships, and facilities
+- **Change history**: review changes to assets, relationships, and facilities, filtered by asset, actor, or action, and export the current result; tag changes list added and removed tags
 - **Change password**: update the password for the signed-in account
+
+The All assets view covers physical hosts, virtual machines, and switches. Clicking a tag's asset count opens that tag's assets in the combined view.
 
 Changing the password requires the current password and a new password of at least 12 characters. After a successful change, every session for the account is revoked and the user must sign in again.
 
@@ -124,12 +126,12 @@ sudo APP_PORT=80 UPDATE_LISTEN=1 bash install.sh
 
 ## Asset management
 
-Add individual assets with the `新增资产` button. For larger inventories, use CSV import: edit the file in Excel and save it as `CSV UTF-8` (comma-separated), click `下载模板` on the asset list to get the template, fill it in, then click `导入 CSV`. The file is validated and previewed first; row errors are listed for correction, and data is written only after you confirm.
+Add individual assets with the `新增资产` button. For larger inventories, use CSV import: edit the file in Excel and save it as `CSV UTF-8` (comma-separated), click `下载模板` on the asset list to get the template, fill it in, then click `导入 CSV`. The file is validated and previewed first; row errors are listed for correction and can be downloaded as a CSV report, and data is written only after you confirm.
 
 Template columns:
 
 ```text
-资源名称,类型,平台,状态,生命周期,地址 / IP,CPU,内存 MiB,负责人,环境,备注,扩展属性
+资源名称,类型,平台,状态,生命周期,地址 / IP,CPU,内存 MiB,负责人,环境,备注,扩展属性,标签
 ```
 
 - Type: `host`, `vm`, `switch`, or the Chinese labels 物理机, 虚拟机, 交换机.
@@ -137,6 +139,7 @@ Template columns:
 - Status: `unknown`, `online`, `offline`, `running`, `stopped`, `paused`, or the Chinese labels 未知, 在线, 离线, 运行中, 已停止, 已暂停.
 - Lifecycle: `active`, `retired`, 在册, 已退役; empty defaults to active.
 - Attributes: a JSON object such as `{"位置":"A01"}`; empty becomes `{}`.
+- Tags: separate multiple tags with semicolons or commas, for example 生产; 核心; tags must already exist under Tags, otherwise the whole import is rejected.
 - CPU and memory MiB must be non-negative integers.
 
 Import rules:
@@ -144,16 +147,17 @@ Import rules:
 - Up to 5,000 rows and 16 MiB per import;
 - Validation and insert run in one batch; if any row fails, nothing is written;
 - Import only creates new assets; it never overwrites an existing asset;
+- Tags are matched by name and are never created automatically;
 - Asset names must not duplicate an existing asset or another row in the same file;
 - Successful imports appear in change history under the current account.
 
 Exported CSV files use the same columns and can be used as a reference when preparing an import.
 
-Asset details are organized into overview, relationships, custom attributes, and change history tabs, with a relationship graph in the relationships tab. Custom attributes use a key-value editor with text, number, boolean, and JSON value types. Assets can carry multiple colored tags: maintain tags under `System → Tags`, then select them from the asset detail `Tags` button. Tags appear in the asset list and can be used as a filter; with multiple tags you can choose all-of or any-of matching, and saved filter presets keep both the tag array and match mode. The global search also finds tags by name or description. Select multiple assets to add, remove, or replace tags in bulk. Star assets from the list or detail view to keep them in the dashboard `My favorites` shortcut. The dashboard also charts tag usage. The asset list supports status filters, saved filter presets, configurable columns, and click-to-sort headers. Select multiple assets to bulk-edit status, lifecycle, owner, and environment. The global header search covers assets, IP addresses, data centers, racks, and subnets.
+Asset details are organized into overview, relationships, custom attributes, and change history tabs, with a relationship graph in the relationships tab. Custom attributes use a key-value editor with text, number, boolean, and JSON value types. Assets can carry multiple colored tags: maintain tags under `System → Tags`, then select them from the asset detail `Tags` button. Tags appear in the asset list and can be used as a filter; with multiple tags you can choose all-of or any-of matching, and saved filter presets keep both the tag array and match mode. The global search also finds tags by name or description. Select multiple assets to add, remove, or replace tags in bulk. Star assets from the list or detail view to keep them in the dashboard `My favorites` shortcut. The dashboard also charts tag usage. The asset list supports status filters, saved filter presets, configurable columns, click-to-sort headers, and 10/20/50 page sizes. Select multiple assets to bulk-edit status, platform, lifecycle, owner, and environment. The global header search covers assets, IP addresses, data centers, racks, and subnets, shows the last six searches when empty, and can jump to `All assets` with the current keyword.
 
 ## IP address management
 
-Add a subnet with its CIDR, gateway, and VLAN under `IPAM`. Addresses found in asset `address` fields are counted automatically, and you can also allocate or release IPs and link them to assets.
+Add a subnet with its CIDR, gateway, and VLAN under `IPAM`. The subnet tree can be searched by name, CIDR, gateway, or VLAN. Addresses found in asset `address` fields are counted automatically, and you can also allocate or release IPs and link them to assets.
 
 - IPv4 `/8` through `/30`; partial overlaps are rejected, while a parent prefix may contain child prefixes;
 - Asset addresses may contain multiple IPs separated by commas, semicolons, or spaces;
