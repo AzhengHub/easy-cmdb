@@ -1,8 +1,8 @@
-# Easy CMDB
+# LinkCMDB
 
 [English](README.en.md)
 
-Easy CMDB 是一款简单易用的配置管理数据库，用于集中管理 IT 资产、基础设施配置和资产关系。项目面向中小规模、单机部署的运维场景：约 3000 台虚拟机，整体规模控制在 5000 台主机以内，少量运维人员即可维护。设计取舍是简单、够用、好维护：不引入额外中间件，也不追求大规模集群。当前支持物理机、虚拟机和交换机，提供首页汇总仪表盘、资源详情、搜索筛选、CSV 导入导出、IPAM 网段与 IP 管理、操作审计以及数据中心机柜视图。
+LinkCMDB 是一款简单易用的配置管理数据库，用于集中管理 IT 资产、基础设施配置和资产关系。项目面向中小规模、单机部署的运维场景：约 3000 台虚拟机，整体规模控制在 5000 台主机以内，少量运维人员即可维护。设计取舍是简单、够用、好维护：不引入额外中间件，也不追求大规模集群。当前支持物理机、虚拟机和交换机，提供首页汇总仪表盘、资源详情、搜索筛选、CSV 导入导出、IPAM 网段与 IP 管理、操作审计以及数据中心机柜视图。
 
 项目采用 Go、React 19 + TypeScript、Ant Design 6、ECharts 和 SQLite。一个 Go 二进制、一份 `web/dist` 前端产物和一个 SQLite 文件即可运行，不需要单独部署数据库服务。当前版本使用 SQLite；后续如有需要，可以再扩展 MySQL 或 PostgreSQL 后端。
 
@@ -24,13 +24,13 @@ Easy CMDB 是一款简单易用的配置管理数据库，用于集中管理 IT 
 ```bash
 npm --prefix web ci
 npm --prefix web run build
-go build -trimpath -o bin/easy ./cmd/easy
+go build -trimpath -o bin/linkcmdb ./cmd/linkcmdb
 ```
 
-SQLite 数据库默认是工作目录下的 `easy.db`，首次启动会自动创建数据库文件和表结构，不需要手动建库。启动 Web 服务：
+SQLite 数据库默认是工作目录下的 `linkcmdb.db`，首次启动会自动创建数据库文件和表结构，不需要手动建库。启动 Web 服务：
 
 ```bash
-./bin/easy serve
+./bin/linkcmdb serve
 ```
 
 Windows PowerShell 对应：
@@ -38,8 +38,8 @@ Windows PowerShell 对应：
 ```powershell
 npm --prefix web ci
 npm --prefix web run build
-go build -trimpath -o bin/easy.exe ./cmd/easy
-.\bin\easy.exe serve
+go build -trimpath -o bin/linkcmdb.exe ./cmd/linkcmdb
+.\bin\linkcmdb.exe serve
 ```
 
 访问 [http://127.0.0.1:8080](http://127.0.0.1:8080)。默认初始账号为 `admin`，密码为 `default`；按下面的配置修改密码。登录时需要填写图形验证码，验证码 5 分钟内有效且只能使用一次。首次启动时台账为空，可在页面新增资产，或按下面的方式批量导入。
@@ -58,7 +58,7 @@ cp config.example.yaml config.yaml
 
 ```yaml
 listen: 127.0.0.1:8080
-database: easy.db
+database: linkcmdb.db
 web_dir: web/dist
 cookie_secure: false
 
@@ -92,21 +92,21 @@ viewer:
 
 ## 部署到 Linux 服务器
 
-服务器端安装脚本是 `scripts/install.sh`，用于安装预先构建好的 `easy` 和前端 `dist/`。脚本本身不负责编译；克隆后直接运行它不适用于没有 Go/Node 的目标服务器。等后续提供 release 安装包时，再补“下载即安装”的入口。
+服务器端安装脚本是 `scripts/install.sh`，用于安装预先构建好的 `linkcmdb` 和前端 `dist/`。脚本本身不负责编译；克隆后直接运行它不适用于没有 Go/Node 的目标服务器。等后续提供 release 安装包时，再补“下载即安装”的入口。
 
 先构建 Linux 产物：
 
 ```bash
 npm --prefix web ci
 npm --prefix web run build
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o easy ./cmd/easy
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o linkcmdb ./cmd/linkcmdb
 ```
 
 把以下文件放在同一目录：
 
 ```text
 install.sh
-easy
+linkcmdb
 dist/
 ```
 
@@ -116,7 +116,7 @@ dist/
 sudo APP_PORT=80 bash install.sh
 ```
 
-脚本会创建 `easy-cmdb` 系统账号、安装到 `/opt/easy-cmdb`、生成 `config.yaml`、写入 systemd 服务并启动。80 端口通过 `CAP_NET_BIND_SERVICE` 授权给普通服务账号，不需要整个服务跑 root。首次安装会打印管理员密码；重复部署会保留已有配置和数据库。
+脚本会创建 `linkcmdb` 系统账号、安装到 `/opt/linkcmdb`、生成 `config.yaml`、写入 systemd 服务并启动。80 端口通过 `CAP_NET_BIND_SERVICE` 授权给普通服务账号，不需要整个服务跑 root。首次安装会打印管理员密码；重复部署会保留已有配置和数据库。
 
 已有配置需要强制调整监听端口时：
 
@@ -178,21 +178,21 @@ sudo APP_PORT=80 UPDATE_LISTEN=1 bash install.sh
 
 ## 数据备份
 
-停止 Web 服务后再复制 SQLite 文件。数据库使用 WAL 模式，正常退出时最后一条连接会把 WAL 合并回主文件。若目录中仍有 `easy.db-wal` 或 `easy.db-shm`，说明进程没有正常关闭，请重新启动并正常停止一次再备份。
+停止 Web 服务后再复制 SQLite 文件。数据库使用 WAL 模式，正常退出时最后一条连接会把 WAL 合并回主文件。若目录中仍有 `linkcmdb.db-wal` 或 `linkcmdb.db-shm`，说明进程没有正常关闭，请重新启动并正常停止一次再备份。
 
 ```bash
-cp easy.db easy-cmdb.db
+cp linkcmdb.db linkcmdb-backup.db
 ```
 
-恢复前先在副本上验证。恢复时停止服务，替换数据库文件，并删除可能残留的 `easy.db-wal`、`easy.db-shm`，再重新启动。
+恢复前先在副本上验证。恢复时停止服务，替换数据库文件，并删除可能残留的 `linkcmdb.db-wal`、`linkcmdb.db-shm`，再重新启动。
 
 ## 开发
 
 每次代码改动通过相关检查后，默认按上面的 Linux 部署流程构建发布包，并通过已配置的 SSH 目标 `<dev-ssh-target>` 更新用户指定的远程开发主机。替换产物前先停止服务，保留远程已有的 `config.yaml` 和 SQLite 数据库，安装并启动后检查 `http://<dev-host>/healthz` 及本次改动的主要流程。真实连接信息和凭据只保存在受控且被 Git 忽略的本机配置中。
 
-默认不启动本机或 localhost 服务。仅在用户明确要求本地调试时，首次构建前端后可用 `npm --prefix web run dev` 启动前端开发服务，它会把 `/api` 请求代理到本机 8080 的 Go 服务；Go 服务可用 `go run ./cmd/easy` 启动，调试结束后停止。`go test ./...` 检查 Go 包，`npm --prefix web run check` 执行 TypeScript 类型检查。
+默认不启动本机或 localhost 服务。仅在用户明确要求本地调试时，首次构建前端后可用 `npm --prefix web run dev` 启动前端开发服务，它会把 `/api` 请求代理到本机 8080 的 Go 服务；Go 服务可用 `go run ./cmd/linkcmdb` 启动，调试结束后停止。`go test ./...` 检查 Go 包，`npm --prefix web run check` 执行 TypeScript 类型检查。
 
-表结构在 `internal/cmdb/schema.sql`，首次启动时自动执行。项目仍在开发阶段，修改表结构后删除本地 `easy.db` 并重启即可重建，不需要迁移文件。
+表结构在 `internal/cmdb/schema.sql`，首次启动时自动执行。项目仍在开发阶段，修改表结构后删除本地 `linkcmdb.db` 并重启即可重建，不需要迁移文件。
 
 ## 许可证
 
