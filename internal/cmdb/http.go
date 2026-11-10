@@ -40,6 +40,7 @@ func NewServer(db *sql.DB, secureCookie bool, frontend http.Handler) http.Handle
 		respond(w, http.StatusOK, currentUser(r))
 	}))
 	mux.HandleFunc("GET /api/assets", s.requireUser(false, s.listAssets))
+	mux.HandleFunc("GET /api/search", s.requireUser(false, s.search))
 	mux.HandleFunc("POST /api/assets/bulk", s.requireUser(true, s.bulkUpdateAssets))
 	mux.HandleFunc("POST /api/assets/bulk/tags", s.requireUser(true, s.bulkUpdateAssetTags))
 	mux.HandleFunc("GET /api/tags", s.requireUser(false, s.listTags))
@@ -84,6 +85,14 @@ func (s *Server) listAssets(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, assets)
 }
 
+func (s *Server) search(w http.ResponseWriter, r *http.Request) {
+	results, err := Search(r.Context(), s.db, r.URL.Query().Get("q"))
+	if err != nil {
+		s.databaseError(w, err)
+		return
+	}
+	respond(w, http.StatusOK, results)
+}
 
 func (s *Server) listTags(w http.ResponseWriter, r *http.Request) {
 	tags, err := ListTags(r.Context(), s.db)
