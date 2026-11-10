@@ -23,6 +23,7 @@ import { ChangePassword } from './components/ChangePassword'
 import { Dashboard } from './components/Dashboard'
 import { FacilityView } from './components/FacilityView'
 import { IpamView } from './components/IpamView'
+import { Wordmark } from './components/Wordmark'
 import { Logo } from './components/Logo'
 
 const { Header, Sider, Content } = Layout
@@ -563,7 +564,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
         <section className="login-panel" aria-label="登录">
           <ThemeToggle dark={dark} onToggleTheme={onToggleTheme} className="login-theme-toggle" />
           <Card className="login-card" variant="borderless">
-            <div className="login-brand"><Logo /> Easy CMDB</div>
+            <div className="login-brand"><Logo /> <Wordmark /></div>
             {error && <Alert type="error" showIcon message={error} className="login-alert" />}
             <Form layout="vertical" onFinish={login}>
               <Form.Item label="账号" name="username" rules={[{ required: true, message: '请输入账号' }]}>
@@ -615,7 +616,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
       >
         <div className="brand" onClick={() => goTo('home')}>
           <Logo />
-          <span>Easy CMDB</span>
+          <Wordmark />
         </div>
         <Menu
           className="app-menu" mode="inline" selectedKeys={[page]}
