@@ -1,4 +1,4 @@
-﻿@font-face {
+@font-face {
   font-family: "Outfit";
   font-style: normal;
   font-weight: 100 900;
@@ -96,7 +96,7 @@ a { color: var(--primary); }
 .login-card .ant-card-body { padding: 0; }
 .login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 44px; font-size: 28px; line-height: 1.35; font-weight: 600; color: var(--text); }
 .wordmark { display: inline-flex; align-items: baseline; gap: .18em; max-width: 100%; font-family: "Outfit", "Segoe UI", sans-serif; font-size: 1em; font-weight: 500; line-height: 1; letter-spacing: -.02em; white-space: nowrap; }
-.wordmark-easy { color: var(--text); font-weight: 500; letter-spacing: -.01em; }
+.wordmark-link { color: var(--text); font-weight: 500; letter-spacing: -.01em; }
 .wordmark-cmdb { color: var(--primary); font-weight: 700; letter-spacing: -.035em; background: linear-gradient(100deg, var(--primary) 5%, #36cfc9 95%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .login-alert { margin-bottom: 16px; }
 .login-theme-toggle { position: absolute; top: 24px; right: 28px; }

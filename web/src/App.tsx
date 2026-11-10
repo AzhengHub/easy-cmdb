@@ -1011,7 +1011,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   if (!user) {
     return (
       <main className="login-page">
-        <section className="login-visual" aria-label="Easy CMDB 简介">
+        <section className="login-visual" aria-label="LinkCMDB 简介">
           <div className="login-visual-content">
             <p className="login-visual-title">让资产与关系清晰可见</p>
             <p className="login-visual-description">集中管理基础设施资产、网络与配置。</p>
