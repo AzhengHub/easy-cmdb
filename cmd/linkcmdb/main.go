@@ -12,22 +12,22 @@ import (
 	"syscall"
 	"time"
 
-	"easy-cmdb/internal/cmdb"
-	"easy-cmdb/internal/config"
+	"github.com/linkcmdb/linkcmdb/internal/cmdb"
+	"github.com/linkcmdb/linkcmdb/internal/config"
 )
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := run(ctx, os.Args[1:]); err != nil {
-		slog.Error("easy", "error", err)
+		slog.Error("linkcmdb", "error", err)
 		os.Exit(1)
 	}
 }
 
 func run(ctx context.Context, args []string) error {
 	if len(args) > 1 || (len(args) == 1 && args[0] != "serve") {
-		return errors.New("用法: easy [serve]")
+		return errors.New("用法: linkcmdb [serve]")
 	}
 
 	cfg, _, err := config.Load("config.yaml")

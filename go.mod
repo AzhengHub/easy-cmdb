@@ -1,4 +1,4 @@
-module easy-cmdb
+module github.com/linkcmdb/linkcmdb
 
 go 1.26.0
 
