@@ -124,7 +124,7 @@ sudo APP_PORT=80 UPDATE_LISTEN=1 bash install.sh
 
 ## Asset management
 
-Add individual assets with the `新增资产` button. For larger inventories, use CSV import: edit the file in Excel and save it as `CSV UTF-8` (comma-separated), click `下载模板` on the asset list to get the template, fill it in, then click `导入 CSV`.
+Add individual assets with the `新增资产` button. For larger inventories, use CSV import: edit the file in Excel and save it as `CSV UTF-8` (comma-separated), click `下载模板` on the asset list to get the template, fill it in, then click `导入 CSV`. The file is validated and previewed first; row errors are listed for correction, and data is written only after you confirm.
 
 Template columns:
 
@@ -149,11 +149,13 @@ Import rules:
 
 Exported CSV files use the same columns and can be used as a reference when preparing an import.
 
+Asset details are organized into overview, relationships, custom attributes, and change history tabs, with a relationship graph in the relationships tab. Custom attributes use a key-value editor with text, number, boolean, and JSON value types. Assets can carry multiple colored tags: maintain tags under `System → Tags`, then select them from the asset detail `Tags` button. Tags appear in the asset list and can be used as a filter; with multiple tags you can choose all-of or any-of matching, and saved filter presets keep both the tag array and match mode. The global search also finds tags by name or description. Select multiple assets to add, remove, or replace tags in bulk. Star assets from the list or detail view to keep them in the dashboard `My favorites` shortcut. The dashboard also charts tag usage. The asset list supports status filters, saved filter presets, configurable columns, and click-to-sort headers. Select multiple assets to bulk-edit status, lifecycle, owner, and environment. The global header search covers assets, IP addresses, data centers, racks, and subnets.
+
 ## IP address management
 
 Add a subnet with its CIDR, gateway, and VLAN under `IPAM`. Addresses found in asset `address` fields are counted automatically, and you can also allocate or release IPs and link them to assets.
 
-- IPv4 `/8` through `/30`; overlapping subnets are rejected;
+- IPv4 `/8` through `/30`; partial overlaps are rejected, while a parent prefix may contain child prefixes;
 - Asset addresses may contain multiple IPs separated by commas, semicolons, or spaces;
 - Used addresses include the gateway, asset addresses, and manual allocations;
 - The first 50 free addresses are listed, while the total free count is calculated from the subnet size;
