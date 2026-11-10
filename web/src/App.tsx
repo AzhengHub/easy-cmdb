@@ -553,49 +553,61 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
   if (!user) {
     return (
-      <div className="login-page">
-        <ThemeToggle dark={dark} onToggleTheme={onToggleTheme} className="login-theme-toggle" />
-        <Card className="login-card" variant="borderless">
-          <div className="login-brand"><Logo /> Easy CMDB</div>
-          {error && <Alert type="error" showIcon message={error} className="login-alert" />}
-          <Form layout="vertical" onFinish={login}>
-            <Form.Item label="账号" name="username" rules={[{ required: true, message: '请输入账号' }]}>
-              <Input
-                size="large" autoComplete="username" value={loginForm.username}
-                onChange={event => setLoginForm(current => ({ ...current, username: event.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="密码" name="password" rules={[{ required: true, message: '请输入密码' }]}>
-              <Input.Password
-                size="large" autoComplete="current-password" value={loginForm.password}
-                onChange={event => setLoginForm(current => ({ ...current, password: event.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="验证码" required>
-              <div className="captcha-row">
+      <main className="login-page">
+        <section className="login-visual" aria-label="Easy CMDB 简介">
+          <div className="login-visual-content">
+            <p className="login-visual-title">让资产与关系清晰可见</p>
+            <p className="login-visual-description">集中管理基础设施资产、网络与配置。</p>
+          </div>
+        </section>
+        <section className="login-panel" aria-label="登录">
+          <ThemeToggle dark={dark} onToggleTheme={onToggleTheme} className="login-theme-toggle" />
+          <Card className="login-card" variant="borderless">
+            <div className="login-brand"><Logo /> Easy CMDB</div>
+            <div className="login-heading">
+              <h1>欢迎使用</h1>
+              <p>登录以管理您的基础设施资产</p>
+            </div>
+            {error && <Alert type="error" showIcon message={error} className="login-alert" />}
+            <Form layout="vertical" onFinish={login}>
+              <Form.Item label="账号" name="username" rules={[{ required: true, message: '请输入账号' }]}>
                 <Input
-                  size="large" value={captchaCode} maxLength={8} autoComplete="off" placeholder="请输入右侧字符"
-                  onChange={event => setCaptchaCode(event.target.value)}
+                  size="large" autoComplete="username" value={loginForm.username}
+                  onChange={event => setLoginForm(current => ({ ...current, username: event.target.value }))}
                 />
-                <button
-                  type="button" className="captcha-image-button" title="点击刷新验证码"
-                  aria-label="刷新验证码" onClick={() => void loadCaptcha()} disabled={captchaLoading}
-                >
-                  {captcha ? <img src={captcha.image} alt="验证码" /> : <span className="captcha-placeholder">加载中</span>}
-                </button>
-                <Button
-                  type="text" icon={<ReloadOutlined />} aria-label="刷新验证码"
-                  loading={captchaLoading} onClick={() => void loadCaptcha()}
+              </Form.Item>
+              <Form.Item label="密码" name="password" rules={[{ required: true, message: '请输入密码' }]}>
+                <Input.Password
+                  size="large" autoComplete="current-password" value={loginForm.password}
+                  onChange={event => setLoginForm(current => ({ ...current, password: event.target.value }))}
                 />
-              </div>
-            </Form.Item>
-            <Button
-              type="primary" htmlType="submit" block size="large"
-              loading={loginBusy} disabled={captchaLoading || !captcha || !captchaCode.trim()}
-            >登录</Button>
-          </Form>
-        </Card>
-      </div>
+              </Form.Item>
+              <Form.Item label="验证码" required>
+                <div className="captcha-row">
+                  <Input
+                    size="large" value={captchaCode} maxLength={8} autoComplete="off" placeholder="请输入右侧字符"
+                    onChange={event => setCaptchaCode(event.target.value)}
+                  />
+                  <button
+                    type="button" className="captcha-image-button" title="点击刷新验证码"
+                    aria-label="刷新验证码" onClick={() => void loadCaptcha()} disabled={captchaLoading}
+                  >
+                    {captcha ? <img src={captcha.image} alt="验证码" /> : <span className="captcha-placeholder">加载中</span>}
+                  </button>
+                  <Button
+                    type="text" icon={<ReloadOutlined />} aria-label="刷新验证码"
+                    loading={captchaLoading} onClick={() => void loadCaptcha()}
+                  />
+                </div>
+              </Form.Item>
+              <Button
+                type="primary" htmlType="submit" block size="large"
+                loading={loginBusy} disabled={captchaLoading || !captcha || !captchaCode.trim()}
+              >登录</Button>
+            </Form>
+          </Card>
+        </section>
+      </main>
     )
   }
 
