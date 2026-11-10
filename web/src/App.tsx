@@ -638,12 +638,12 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
     }
   }
 
-  async function saveBulkEdit(values: { status?: string; lifecycle?: string; owner?: string; environment?: string }) {
+  async function saveBulkEdit(values: { status?: string; platform?: string; lifecycle?: string; owner?: string; environment?: string }) {
     setBulkSaving(true)
     setBulkError('')
     try {
       const fields: Record<string, string> = {}
-      for (const key of ['status', 'lifecycle', 'owner', 'environment'] as const) {
+      for (const key of ['status', 'platform', 'lifecycle', 'owner', 'environment'] as const) {
         const value = values[key]?.trim()
         if (value) fields[key] = value
       }
@@ -1146,7 +1146,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
           )}
 
           {page === 'changes' && (
-            <Card variant="borderless" title="变更记录"><ChangeList changes={changes} onOpen={id => void openAsset(id)} /></Card>
+            <Card variant="borderless" title="变更记录"><ChangeList changes={changes} filterable onOpen={id => void openAsset(id)} /></Card>
           )}
 
           {page === 'tags' && <TagManager editable={editable} onSessionError={e => handleError(e)} onChanged={setAllTags} onShowAssets={showTagAssets} />}
@@ -1437,6 +1437,12 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
                 { value: 'running', label: '运行中' }, { value: 'stopped', label: '已停止' },
                 { value: 'paused', label: '已暂停' }, { value: 'unknown', label: '未知' },
               ]}
+            />
+          </Form.Item>
+          <Form.Item label="平台" name="platform" extra="留空表示不修改">
+            <Select
+              allowClear placeholder="不修改"
+              options={[{ value: 'pve', label: 'Proxmox VE' }, { value: 'kvm', label: 'KVM / libvirt' }]}
             />
           </Form.Item>
           <Form.Item label="生命周期" name="lifecycle" extra="留空表示不修改">

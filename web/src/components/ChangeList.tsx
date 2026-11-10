@@ -1,14 +1,18 @@
-import { Button, Empty, Tag, Timeline } from 'antd'
+import { useMemo, useState } from 'react'
+import { Button, Empty, Input, Select, Space, Tag, Timeline } from 'antd'
+import { DownloadOutlined } from '@ant-design/icons'
 import type { Change } from '../api'
 
 interface Props {
   changes: Change[]
   hideAsset?: boolean
+  filterable?: boolean
   onOpen?: (id: number) => void
 }
 
 const actionLabels: Record<string, string> = {
   create: '创建', update: '编辑', discover: '自动发现', sync: '配置同步', move: '宿主机变更',
+  tags: '标签变更',
   missing: '连续未发现', link: '关联资源', unlink: '解除关系',
   room_create: '新增数据中心', room_update: '编辑数据中心', room_delete: '删除数据中心',
   rack_create: '新增机柜', rack_update: '编辑机柜', rack_delete: '删除机柜',
@@ -26,6 +30,16 @@ const fieldLabels: Record<string, string> = {
 const relationLabels: Record<string, string> = { hosts: '承载' }
 
 function summary(change: Change) {
+  if (change.action === 'tags') {
+    const before = Array.isArray(change.before) ? change.before.map(String) : []
+    const after = Array.isArray(change.after) ? change.after.map(String) : []
+    const added = after.filter(name => !before.includes(name))
+    const removed = before.filter(name => !after.includes(name))
+    return [
+      added.length ? `新增：${added.join('、')}` : '',
+      removed.length ? `移除：${removed.join('、')}` : '',
+    ].filter(Boolean).join(' · ') || '标签未变化'
+  }
   if (change.action === 'move') return String(change.before?.fromName ?? '—') + ' → ' + String(change.after?.fromName ?? '—')
   if (change.action === 'link' || change.action === 'unlink') {
     const relation = change.after ?? change.before
@@ -69,34 +83,95 @@ function date(value: string) {
   return new Date(value).toLocaleString('zh-CN', { hour12: false })
 }
 
-export function ChangeList({ changes, hideAsset, onOpen }: Props) {
+function csvCell(value: string | number) {
+  const text = String(value)
+  return /[",\r\n]/.test(text) ? '"' + text.replaceAll('"', '""') + '"' : text
+}
+
+function downloadChanges(changes: Change[]) {
+  const rows: (string | number)[][] = [['时间', '动作', '资产', '操作人', '摘要', '变更字段']]
+  for (const change of changes) {
+    rows.push([
+      date(change.createdAt),
+      actionLabels[change.action] ?? change.action,
+      change.assetName,
+      change.actor,
+      summary(change),
+      differences(change).map(diff => `${diff.field}: ${diff.before} → ${diff.after}`).join('; '),
+    ])
+  }
+  const csv = '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n')
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'easy-cmdb-changes.csv'
+  link.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export function ChangeList({ changes, hideAsset, filterable, onOpen }: Props) {
+  const [keyword, setKeyword] = useState('')
+  const [action, setAction] = useState<string | undefined>()
+  const actions = useMemo(() => Array.from(new Set(changes.map(change => change.action)))
+    .sort((left, right) => (actionLabels[left] ?? left).localeCompare(actionLabels[right] ?? right, 'zh-CN')), [changes])
+  const visible = useMemo(() => {
+    const query = keyword.trim().toLowerCase()
+    return changes.filter(change => {
+      if (action && change.action !== action) return false
+      if (!query) return true
+      return [change.assetName, change.actor, actionLabels[change.action] ?? change.action, summary(change)]
+        .some(value => value?.toLowerCase().includes(query))
+    })
+  }, [action, changes, keyword])
+
   if (!changes.length) return <Empty description="暂无变更记录" />
 
   return (
-    <Timeline
-      items={changes.map(change => ({
-        color: 'blue',
-        children: (
-          <div>
-            <div className="change-head">
-              <Tag>{actionLabels[change.action] ?? change.action}</Tag>
-              {!hideAsset && change.assetId ? (
-                <Button type="link" size="small" onClick={() => onOpen?.(change.assetId)}>{change.assetName}</Button>
-              ) : !hideAsset ? <strong>{change.assetName}</strong> : null}
-              <span className="muted">{change.actor} · {date(change.createdAt)}</span>
-            </div>
-            {summary(change) && <p className="change-summary">{summary(change)}</p>}
-            {differences(change).map(diff => (
-              <div key={diff.field} className="change-field">
-                <span className="muted">{diff.field}</span>
-                <del>{diff.before}</del>
-                <span aria-hidden="true">→</span>
-                <ins>{diff.after}</ins>
+    <>
+      {filterable && (
+        <div className="change-toolbar">
+          <Space wrap>
+            <Input
+              allowClear style={{ width: 280 }} placeholder="搜索资产、操作人或动作"
+              value={keyword} onChange={event => setKeyword(event.target.value)}
+            />
+            <Select
+              allowClear style={{ width: 160 }} placeholder="全部动作" value={action}
+              onChange={setAction}
+              options={actions.map(item => ({ value: item, label: actionLabels[item] ?? item }))}
+            />
+            <span className="muted">共 {visible.length} 条</span>
+            <Button icon={<DownloadOutlined />} disabled={!visible.length} onClick={() => downloadChanges(visible)}>导出当前结果</Button>
+          </Space>
+        </div>
+      )}
+      {visible.length === 0 ? <Empty description="没有匹配的变更记录" /> : (
+        <Timeline
+          items={visible.map(change => ({
+            color: 'blue',
+            children: (
+              <div>
+                <div className="change-head">
+                  <Tag>{actionLabels[change.action] ?? change.action}</Tag>
+                  {!hideAsset && change.assetId ? (
+                    <Button type="link" size="small" onClick={() => onOpen?.(change.assetId)}>{change.assetName}</Button>
+                  ) : !hideAsset ? <strong>{change.assetName}</strong> : null}
+                  <span className="muted">{change.actor} · {date(change.createdAt)}</span>
+                </div>
+                {summary(change) && <p className="change-summary">{summary(change)}</p>}
+                {differences(change).map(diff => (
+                  <div key={diff.field} className="change-field">
+                    <span className="muted">{diff.field}</span>
+                    <del>{diff.before}</del>
+                    <span aria-hidden="true">→</span>
+                    <ins>{diff.after}</ins>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        ),
-      }))}
-    />
+            ),
+          }))}
+        />
+      )}
+    </>
   )
 }
