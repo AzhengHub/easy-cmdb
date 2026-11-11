@@ -241,8 +241,15 @@ html[data-theme="dark"] .change-field ins { color: #73d13d; }
 
 /* IPAM */
 .ipam-alert { margin-bottom: 12px; }
+.ipam-stats { margin-bottom: 14px; }
 .ipam-layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 18px; }
 .subnet-pane { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.subnet-pane > .ant-select { width: 100%; }
+.detail-tags { margin-bottom: 2px; }
+.subnet-cidr-line { margin-top: 3px; }
+.vlan-name { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.vlan-name > span { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.vlan-toolbar { margin-bottom: 12px; }
 .subnet-list { border: 1px solid var(--line); border-radius: 8px; padding: 8px; max-height: 720px; overflow: auto; }
 .subnet-item { cursor: pointer; padding: 10px; border-radius: 6px; }
 .subnet-item:hover { background: var(--hover); }

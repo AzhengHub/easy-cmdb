@@ -38,8 +38,8 @@ export interface SubnetFields {
   gateway: string
   vlan: string
   notes: string
-  status?: string
-  role?: string
+  status: string
+  role: string
 }
 
 export interface Subnet extends SubnetFields {
@@ -54,8 +54,6 @@ export interface Subnet extends SubnetFields {
 
 export interface IPUsage {
   ip: string
-  /** Legacy source field kept while the older subnet view is still in use. */
-  status: 'gateway' | 'asset' | 'allocated'
   source: 'gateway' | 'asset' | 'allocated'
   state: string
   assetId?: number

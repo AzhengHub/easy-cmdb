@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Alert, Button, Card, Col, Empty, Form, Input, List, Popconfirm, Progress, Row,
+  Alert, Button, Card, Col, Empty, Form, Input, List, Modal, Popconfirm, Progress, Row,
   Select, Space, Statistic, Table, Tag,
 } from 'antd'
 import type { TableColumnsType } from 'antd'
-import { CloseOutlined, DownOutlined, PlusOutlined, ReloadOutlined, RightOutlined, SearchOutlined, StarFilled, StarOutlined } from '@ant-design/icons'
+import { CloseOutlined, DownOutlined, EditOutlined, PlusOutlined, ReloadOutlined, RightOutlined, SearchOutlined, StarFilled, StarOutlined } from '@ant-design/icons'
 import { api, APIError } from '../api'
-import type { Asset, IPUsage, Subnet, SubnetDetail, SubnetFields } from '../api'
+import type { Allocation, Asset, IPUsage, Subnet, SubnetDetail, SubnetFields, VLAN } from '../api'
 
 interface Props {
   editable: boolean
@@ -20,11 +20,39 @@ interface Props {
 
 type SubnetDraft = SubnetFields & { id?: number; version?: number }
 
-function statusLabel(status: string) {
-  return status === 'gateway' ? '网关' : status === 'asset' ? '资产地址' : '已分配'
+const subnetStatusMeta: Record<string, { label: string; color: string }> = {
+  container: { label: '聚合', color: 'default' },
+  active: { label: '启用', color: 'green' },
+  reserved: { label: '预留', color: 'cyan' },
+  deprecated: { label: '停用', color: 'default' },
 }
-function statusColor(status: string) {
-  return status === 'gateway' ? 'blue' : status === 'asset' ? 'default' : 'green'
+const allocationStateMeta: Record<string, { label: string; color: string }> = {
+  active: { label: '启用', color: 'green' },
+  reserved: { label: '预留', color: 'cyan' },
+  deprecated: { label: '停用', color: 'default' },
+  dhcp: { label: 'DHCP', color: 'purple' },
+  slaac: { label: 'SLAAC', color: 'purple' },
+}
+const sourceMeta: Record<string, { label: string; color: string }> = {
+  gateway: { label: '网关', color: 'gold' },
+  asset: { label: '资产地址', color: 'default' },
+  allocated: { label: '手工分配', color: 'blue' },
+}
+const roleLabels: Record<string, string> = {
+  loopback: '环回', secondary: '辅助', vip: 'VIP', vrrp: 'VRRP',
+  hsrp: 'HSRP', glbp: 'GLBP', anycast: 'Anycast',
+}
+function sourceLabel(source: string) {
+  return sourceMeta[source]?.label ?? source
+}
+function sourceColor(source: string) {
+  return sourceMeta[source]?.color ?? 'default'
+}
+function stateLabel(state: string) {
+  return allocationStateMeta[state]?.label ?? state
+}
+function stateColor(state: string) {
+  return allocationStateMeta[state]?.color ?? 'default'
 }
 function count(value: number) {
   return value.toLocaleString('zh-CN')
@@ -122,12 +150,17 @@ function flattenSubnetTree(nodes: SubnetNode[], collapsed: Set<number>): SubnetR
 export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSubnets, onToggleSubnetBookmark, onSessionError, onChanged }: Props) {
   const [subnets, setSubnets] = useState<Subnet[]>([])
   const [assets, setAssets] = useState<Asset[]>([])
+  const [vlans, setVLANs] = useState<VLAN[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [detail, setDetail] = useState<SubnetDetail | null>(null)
   const [draft, setDraft] = useState<SubnetDraft | null>(null)
-  const [allocation, setAllocation] = useState({ ip: '', assetId: 0, label: '', notes: '' })
+  const [allocation, setAllocation] = useState({ ip: '', assetId: 0, label: '', notes: '', status: 'active', dnsName: '', role: '' })
+  const [editingAllocation, setEditingAllocation] = useState<IPUsage | null>(null)
+  const [allocationError, setAllocationError] = useState('')
+  const [allocationForm] = Form.useForm()
   const [search, setSearch] = useState('')
   const [subnetSearch, setSubnetSearch] = useState('')
+  const [subnetStatus, setSubnetStatus] = useState<string | undefined>()
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -139,19 +172,31 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
   const subnetRows = useMemo(() => flattenSubnetTree(subnetTree, collapsed), [subnetTree, collapsed])
   const visibleSubnetRows = useMemo(() => {
     const query = subnetSearch.trim().toLowerCase()
-    if (!query) return subnetRows
     return subnetRows
-      .filter(row => [row.subnet.name, row.subnet.cidr, row.subnet.gateway, row.subnet.vlan].some(value => value?.toLowerCase().includes(query)))
-      .map(row => ({ ...row, depth: 0, children: 0 }))
-  }, [subnetRows, subnetSearch])
+      .filter(row => !subnetStatus || row.subnet.status === subnetStatus)
+      .filter(row => !query || [row.subnet.name, row.subnet.cidr, row.subnet.gateway, row.subnet.vlan,
+        row.subnet.vlanName, row.subnet.role].some(value => value?.toLowerCase().includes(query)))
+      .map(row => query || subnetStatus ? ({ ...row, depth: 0, children: 0 }) : row)
+  }, [subnetRows, subnetSearch, subnetStatus])
   const usage = useMemo(() => {
     const query = search.trim().toLowerCase()
     const rows = detail?.usedIps ?? []
     if (!query) return rows
-    return rows.filter(row => [row.ip, row.assetName, row.label, row.notes, statusLabel(row.status)]
+    return rows.filter(row => [row.ip, row.assetName, row.label, row.notes, row.dnsName, row.role,
+      sourceLabel(row.source), stateLabel(row.state)]
       .some(value => value?.toLowerCase().includes(query)))
   }, [detail, search])
   const utilization = detail && detail.usable > 0 ? Math.min(100, Math.round(detail.used / detail.usable * 100)) : 0
+  const vlanOptions = useMemo(() => {
+    const options = vlans.map(vlan => ({
+      value: String(vlan.vid),
+      label: `VLAN ${vlan.vid} · ${vlan.name}${vlan.status !== 'active' ? `（${subnetStatusMeta[vlan.status]?.label ?? vlan.status}）` : ''}`,
+    }))
+    if (draft?.vlan && !vlans.some(vlan => String(vlan.vid) === draft.vlan)) {
+      options.push({ value: draft.vlan, label: `VLAN ${draft.vlan}（未登记）` })
+    }
+    return options
+  }, [draft?.vlan, vlans])
 
   useEffect(() => { void load() }, [])
 
@@ -180,9 +225,12 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
     setLoading(true)
     setError('')
     try {
-      const [nextSubnets, nextAssets] = await Promise.all([api<Subnet[]>('/subnets'), api<Asset[]>('/assets')])
+      const [nextSubnets, nextAssets, nextVLANs] = await Promise.all([
+        api<Subnet[]>('/subnets'), api<Asset[]>('/assets'), api<VLAN[]>('/vlans'),
+      ])
       setSubnets(nextSubnets)
       setAssets(nextAssets)
+      setVLANs(nextVLANs)
       const wanted = preferredId === undefined ? selectedId : preferredId
       const nextId = nextSubnets.some(item => item.id === wanted) ? wanted : (nextSubnets[0]?.id ?? null)
       setSelectedId(nextId)
@@ -217,7 +265,7 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
   }
 
   function addSubnet() {
-    setDraft({ name: '', cidr: '', gateway: '', vlan: '', notes: '' })
+    setDraft({ name: '', cidr: '', gateway: '', vlan: '', notes: '', status: 'active', role: '' })
     setFeedback('')
   }
 
@@ -226,6 +274,7 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
     setDraft({
       id: selected.id, version: selected.version, name: selected.name, cidr: selected.cidr,
       gateway: selected.gateway, vlan: selected.vlan, notes: selected.notes,
+      status: selected.status, role: selected.role,
     })
   }
 
@@ -237,7 +286,7 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
     try {
       const body = {
         name: draft.name, cidr: draft.cidr, gateway: draft.gateway, vlan: draft.vlan,
-        notes: draft.notes, version: draft.version ?? 0,
+        notes: draft.notes, status: draft.status, role: draft.role, version: draft.version ?? 0,
       }
       const saved = draft.id
         ? await api<Subnet>(`/subnets/${draft.id}`, 'PUT', body)
@@ -283,13 +332,52 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
       await api(`/subnets/${detail.id}/allocations`, 'POST', {
         ip: allocation.ip.trim(), assetId: allocation.assetId || 0,
         label: allocation.label.trim(), notes: allocation.notes.trim(),
+        status: allocation.status, dnsName: allocation.dnsName.trim(), role: allocation.role,
       })
-      setAllocation({ ip: '', assetId: 0, label: '', notes: '' })
+      setAllocation({ ip: '', assetId: 0, label: '', notes: '', status: 'active', dnsName: '', role: '' })
       await load()
       setFeedback('IP 已分配')
       onChanged()
     } catch (e) {
       report(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function editAllocation(row: IPUsage) {
+    setEditingAllocation(row)
+    setError('')
+    setAllocationError('')
+    allocationForm.setFieldsValue({
+      status: row.state, dnsName: row.dnsName ?? '', role: row.role ?? '',
+      assetId: row.assetId || undefined, label: row.label ?? '', notes: row.notes ?? '',
+    })
+  }
+
+  async function updateAllocation() {
+    if (!editingAllocation?.allocationId) return
+    const values = await allocationForm.validateFields()
+    setBusy(true)
+    setAllocationError('')
+    try {
+      await api<Allocation>(`/allocations/${editingAllocation.allocationId}`, 'PUT', {
+        ip: editingAllocation.ip,
+        assetId: values.assetId ?? 0,
+        label: values.label ?? '',
+        notes: values.notes ?? '',
+        status: values.status,
+        dnsName: values.dnsName ?? '',
+        role: values.role ?? '',
+        version: editingAllocation.version ?? 0,
+      })
+      setEditingAllocation(null)
+      await load()
+      setFeedback('IP 地址记录已更新')
+      onChanged()
+    } catch (e) {
+      if (e instanceof APIError && e.status === 401) onSessionError(e)
+      else setAllocationError(e instanceof Error ? e.message : '保存失败')
     } finally {
       setBusy(false)
     }
@@ -313,7 +401,9 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
 
   const usageColumns: TableColumnsType<IPUsage> = [
     { title: 'IP 地址', dataIndex: 'ip', key: 'ip', width: 135, render: value => <span className="mono">{value}</span> },
-    { title: '状态', key: 'status', width: 90, render: (_, row) => <Tag color={statusColor(row.status)}>{statusLabel(row.status)}</Tag> },
+    { title: '来源', key: 'source', width: 96, render: (_, row) => <Tag color={sourceColor(row.source)}>{sourceLabel(row.source)}</Tag> },
+    { title: '状态', key: 'state', width: 90, render: (_, row) => <Tag color={stateColor(row.state)}>{stateLabel(row.state)}</Tag> },
+    { title: 'DNS 名称', dataIndex: 'dnsName', key: 'dnsName', width: 160, render: value => value ? <span className="mono">{value}</span> : '—' },
     {
       title: '资产 / 标签', key: 'owner',
       render: (_, row) => (
@@ -323,13 +413,17 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
         </span>
       ),
     },
+    { title: '角色', dataIndex: 'role', key: 'role', width: 80, render: value => roleLabels[value] ?? (value || '—') },
     { title: '备注', dataIndex: 'notes', key: 'notes', render: value => value || '—' },
     ...(editable ? [{
-      title: '', key: 'actions', width: 70,
-      render: (_: unknown, row: IPUsage) => row.status === 'allocated' ? (
-        <Popconfirm title="释放该 IP？" okText="释放" cancelText="取消" onConfirm={() => void release(row)}>
-          <Button type="link" size="small" danger>释放</Button>
-        </Popconfirm>
+      title: '操作', key: 'actions', width: 110,
+      render: (_: unknown, row: IPUsage) => row.source === 'allocated' ? (
+        <Space size={0}>
+          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => editAllocation(row)}>编辑</Button>
+          <Popconfirm title="释放该 IP？" okText="释放" cancelText="取消" onConfirm={() => void release(row)}>
+            <Button type="link" size="small" danger>释放</Button>
+          </Popconfirm>
+        </Space>
       ) : null,
     }] : []),
   ]
@@ -357,8 +451,25 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
             <Row gutter={12}>
               <Col span={12}><Form.Item label="网段名称" required><Input value={draft.name} maxLength={160} placeholder="例如：办公网" onChange={event => setDraft({ ...draft, name: event.target.value })} /></Form.Item></Col>
               <Col span={12}><Form.Item label="CIDR" required><Input value={draft.cidr} maxLength={64} placeholder="例如：192.168.10.0/24" onChange={event => setDraft({ ...draft, cidr: event.target.value })} /></Form.Item></Col>
+              <Col span={12}>
+                <Form.Item label="状态">
+                  <Select
+                    value={draft.status} onChange={value => setDraft({ ...draft, status: value })}
+                    options={Object.entries(subnetStatusMeta).map(([value, meta]) => ({ value, label: meta.label }))}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}><Form.Item label="用途 / 角色"><Input value={draft.role} maxLength={80} placeholder="例如：办公、服务器、互联" onChange={event => setDraft({ ...draft, role: event.target.value })} /></Form.Item></Col>
+              <Col span={12}>
+                <Form.Item label="VLAN" extra={!vlans.length ? '请先在「VLAN」页面登记 VLAN' : undefined}>
+                  <Select
+                    allowClear showSearch optionFilterProp="label" value={draft.vlan || undefined}
+                    placeholder="可选" options={vlanOptions}
+                    onChange={value => setDraft({ ...draft, vlan: value ?? '' })}
+                  />
+                </Form.Item>
+              </Col>
               <Col span={12}><Form.Item label="网关"><Input value={draft.gateway} maxLength={64} placeholder="例如：192.168.10.1" onChange={event => setDraft({ ...draft, gateway: event.target.value })} /></Form.Item></Col>
-              <Col span={12}><Form.Item label="VLAN"><Input value={draft.vlan} maxLength={32} placeholder="例如：100" onChange={event => setDraft({ ...draft, vlan: event.target.value })} /></Form.Item></Col>
               <Col span={24}><Form.Item label="备注"><Input.TextArea value={draft.notes} rows={2} maxLength={2000} onChange={event => setDraft({ ...draft, notes: event.target.value })} /></Form.Item></Col>
             </Row>
             <Space>
@@ -375,8 +486,13 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
         <div className="ipam-layout">
           <div className="subnet-pane">
             <Input
-              allowClear prefix={<SearchOutlined />} placeholder="搜索名称、CIDR、VLAN"
+              allowClear prefix={<SearchOutlined />} placeholder="搜索名称、CIDR、VLAN、用途"
               value={subnetSearch} onChange={event => setSubnetSearch(event.target.value)}
+            />
+            <Select
+              allowClear placeholder="全部状态" value={subnetStatus}
+              onChange={setSubnetStatus}
+              options={Object.entries(subnetStatusMeta).map(([value, meta]) => ({ value, label: meta.label }))}
             />
             <List
               dataSource={visibleSubnetRows} split={false} className="subnet-list" loading={loading}
@@ -404,7 +520,12 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
                     </Space>
                     <Tag className="mono">{item.cidr}</Tag>
                   </div>
-                  <span className="muted">VLAN {item.vlan || '—'} · 已用 {count(item.used)} / {count(item.usable)} · 空闲 {count(item.free)}</span>
+                  <span className="muted">
+                    {subnetStatusMeta[item.status]?.label ?? item.status}
+                    {item.role ? ` · ${item.role}` : ''}
+                    {' · '}VLAN {item.vlan ? (item.vlanName ? `${item.vlan} ${item.vlanName}` : item.vlan) : '—'}
+                    {' · '}已用 {count(item.used)} / {count(item.usable)} · 空闲 {count(item.free)}
+                  </span>
                   <Progress percent={item.usable > 0 ? Math.round(item.used / item.usable * 100) : 0} size="small" showInfo={false} />
                 </div>
               </List.Item>
@@ -418,7 +539,12 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
                 <div className="detail-head">
                   <div>
                     <h2>{detail.name}</h2>
-                    <span className="muted mono">{detail.cidr} · 网关 {detail.gateway || '—'} · VLAN {detail.vlan || '—'}</span>
+                    <Space size={4} wrap className="detail-tags">
+                      <Tag color={subnetStatusMeta[detail.status]?.color}>{subnetStatusMeta[detail.status]?.label ?? detail.status}</Tag>
+                      {detail.role && <Tag>{detail.role}</Tag>}
+                      {detail.vlan && <Tag color={subnetStatusMeta[detail.vlanStatus ?? '']?.color ?? 'blue'}>VLAN {detail.vlan}{detail.vlanName ? ` · ${detail.vlanName}` : ''}</Tag>}
+                    </Space>
+                    <div className="muted mono subnet-cidr-line">{detail.cidr} · 网关 {detail.gateway || '—'}</div>
                   </div>
                   <Space>
                     <Button
@@ -453,14 +579,32 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
                         <Col span={12}>
                           <Form.Item label="关联资产">
                             <Select
-                              value={allocation.assetId}
-                              onChange={value => setAllocation({ ...allocation, assetId: value })}
-                              options={[{ value: 0, label: '不关联资产' }, ...assets.map(asset => ({ value: asset.id, label: assetLabel(asset) }))]}
+                              allowClear showSearch optionFilterProp="label" value={allocation.assetId || undefined}
+                              placeholder="不关联资产" onChange={value => setAllocation({ ...allocation, assetId: value ?? 0 })}
+                              options={assets.map(asset => ({ value: asset.id, label: assetLabel(asset) }))}
                             />
                           </Form.Item>
                         </Col>
+                        <Col span={12}>
+                          <Form.Item label="状态">
+                            <Select
+                              value={allocation.status} onChange={value => setAllocation({ ...allocation, status: value })}
+                              options={Object.entries(allocationStateMeta).map(([value, meta]) => ({ value, label: meta.label }))}
+                            />
+                          </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                          <Form.Item label="角色">
+                            <Select
+                              allowClear value={allocation.role || undefined} placeholder="可选"
+                              onChange={value => setAllocation({ ...allocation, role: value ?? '' })}
+                              options={Object.entries(roleLabels).map(([value, label]) => ({ value, label }))}
+                            />
+                          </Form.Item>
+                        </Col>
+                        <Col span={12}><Form.Item label="DNS 名称"><Input className="mono" value={allocation.dnsName} maxLength={255} placeholder="例如：db-01.example.test" onChange={event => setAllocation({ ...allocation, dnsName: event.target.value })} /></Form.Item></Col>
                         <Col span={12}><Form.Item label="标签"><Input value={allocation.label} maxLength={160} placeholder="例如：VIP" onChange={event => setAllocation({ ...allocation, label: event.target.value })} /></Form.Item></Col>
-                        <Col span={12}><Form.Item label="备注"><Input value={allocation.notes} maxLength={2000} onChange={event => setAllocation({ ...allocation, notes: event.target.value })} /></Form.Item></Col>
+                        <Col span={24}><Form.Item label="备注"><Input value={allocation.notes} maxLength={2000} onChange={event => setAllocation({ ...allocation, notes: event.target.value })} /></Form.Item></Col>
                       </Row>
                       <Space>
                         <Button type="primary" htmlType="submit" loading={busy}>分配</Button>
@@ -476,7 +620,7 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
                 <div className="section-head">
                   <h3>已占用 IP</h3>
                   <Input
-                    className="usage-search" allowClear placeholder="搜索 IP、资产或标签"
+                    className="usage-search" allowClear placeholder="搜索 IP、DNS、资产、角色或标签"
                     prefix={<SearchOutlined />} value={search}
                     onChange={event => setSearch(event.target.value)}
                   />
@@ -501,6 +645,57 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
           </div>
         </div>
       )}
+
+      <Modal
+        open={!!editingAllocation} title={editingAllocation ? `编辑 ${editingAllocation.ip}` : '编辑 IP 地址'}
+        footer={null} width={560} destroyOnHidden maskClosable={!busy}
+        onCancel={() => { if (!busy) { setEditingAllocation(null); setAllocationError('') } }}
+      >
+        {allocationError && <Alert type="error" showIcon message={allocationError} className="bulk-alert" />}
+        <Form form={allocationForm} layout="vertical" onFinish={() => void updateAllocation()}>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item label="状态" name="status" rules={[{ required: true }]}>
+                <Select options={Object.entries(allocationStateMeta).map(([value, meta]) => ({ value, label: meta.label }))} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="角色" name="role">
+                <Select allowClear placeholder="可选" options={Object.entries(roleLabels).map(([value, label]) => ({ value, label }))} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="DNS 名称" name="dnsName">
+                <Input className="mono" maxLength={255} placeholder="例如：db-01.example.test" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="关联资产" name="assetId">
+                <Select
+                  allowClear showSearch optionFilterProp="label" placeholder="不关联资产"
+                  options={assets.map(asset => ({ value: asset.id, label: assetLabel(asset) }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={24}>
+              <Form.Item label="标签 / 用途" name="label">
+                <Input maxLength={160} placeholder="例如：VIP、数据库主地址" />
+              </Form.Item>
+            </Col>
+            <Col span={24}>
+              <Form.Item label="备注" name="notes">
+                <Input.TextArea rows={2} maxLength={2000} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <div className="bulk-modal-actions">
+            <Space>
+              <Button type="primary" htmlType="submit" loading={busy}>保存</Button>
+              <Button disabled={busy} onClick={() => { setEditingAllocation(null); setAllocationError('') }}>取消</Button>
+            </Space>
+          </div>
+        </Form>
+      </Modal>
     </Card>
   )
 }

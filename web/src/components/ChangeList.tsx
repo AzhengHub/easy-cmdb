@@ -18,7 +18,8 @@ const actionLabels: Record<string, string> = {
   rack_create: '新增机柜', rack_update: '编辑机柜', rack_delete: '删除机柜',
   mount: '设备上架', relocate: '上架位置变更', unmount: '设备下架',
   subnet_create: '新增网段', subnet_update: '编辑网段', subnet_delete: '删除网段',
-  ip_allocate: '分配 IP', ip_release: '释放 IP',
+  ip_allocate: '分配 IP', ip_update: '编辑 IP', ip_release: '释放 IP',
+  vlan_create: '新增 VLAN', vlan_update: '编辑 VLAN', vlan_delete: '删除 VLAN',
 }
 const fieldLabels: Record<string, string> = {
   name: '名称', status: '状态', lifecycle: '生命周期', platform: '平台', owner: '负责人',
@@ -26,6 +27,7 @@ const fieldLabels: Record<string, string> = {
   attributes: '扩展属性', observed: '采集信息', missingCount: '缺失次数',
   columns: '数据中心列数', rows: '数据中心行数', heightU: '机柜高度（U）', column: '机柜所在列', row: '机柜所在行', rotation: '朝向',
   cidr: 'CIDR', gateway: '网关', vlan: 'VLAN', ip: 'IP 地址', assetId: '关联资产', label: '标签',
+  role: '角色', dnsName: 'DNS 名称', vid: 'VLAN ID', description: '描述', roomId: '所属数据中心',
 }
 const relationLabels: Record<string, string> = { hosts: '承载' }
 
@@ -50,9 +52,15 @@ function summary(change: Change) {
     const subnet = change.after ?? change.before
     return [subnet?.name, subnet?.cidr].filter(Boolean).map(String).join(' · ')
   }
-  if (change.action === 'ip_allocate' || change.action === 'ip_release') {
+  if (change.action === 'ip_allocate' || change.action === 'ip_update' || change.action === 'ip_release') {
     const allocation = change.after ?? change.before
-    return [allocation?.ip, allocation?.assetName || allocation?.label].filter(Boolean).map(String).join(' · ')
+    return [allocation?.ip, allocation?.dnsName, allocation?.assetName || allocation?.label]
+      .filter(Boolean).map(String).join(' · ')
+  }
+  if (change.action.startsWith('vlan_')) {
+    const vlan = change.after ?? change.before
+    return [vlan?.vid ? `VLAN ${vlan.vid}` : '', vlan?.name, vlan?.description]
+      .filter(Boolean).map(String).join(' · ')
   }
   if (change.action === 'mount' || change.action === 'relocate' || change.action === 'unmount') {
     const position = (value: Change['before']) => {
@@ -73,9 +81,11 @@ function display(value: unknown): string {
 }
 
 function differences(change: Change) {
-  if (!change.before || !change.after || !['update', 'sync', 'room_update', 'rack_update', 'subnet_update'].includes(change.action)) return []
+  if (!change.before || !change.after ||
+    !['update', 'sync', 'room_update', 'rack_update', 'subnet_update', 'ip_update', 'vlan_update'].includes(change.action)) return []
+  const ignored = new Set(['id', 'version', 'subnetId', 'assetId', 'assetName', 'subnetName'])
   return Object.entries(change.after)
-    .filter(([key, after]) => display(change.before?.[key]) !== display(after))
+    .filter(([key, after]) => !ignored.has(key) && display(change.before?.[key]) !== display(after))
     .map(([key, after]) => ({ field: fieldLabels[key] ?? key, before: display(change.before?.[key]), after: display(after) }))
 }
 
