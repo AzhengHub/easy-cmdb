@@ -93,6 +93,25 @@ func TestIPAM(t *testing.T) {
 		t.Fatalf("unexpected address inventory: %+v", addresses)
 	}
 
+	available, err := ListAvailableIPs(ctx, db, subnet.ID, 0, 5)
+	if err != nil {
+		t.Fatalf("list available ips: %v", err)
+	}
+	if available.Total != 251 || len(available.Items) != 5 || available.Items[0] != "192.168.10.2" {
+		t.Fatalf("unexpected available ips: %+v", available)
+	}
+	nextPage, err := ListAvailableIPs(ctx, db, subnet.ID, 5, 5)
+	if err != nil {
+		t.Fatalf("list second available page: %v", err)
+	}
+	if len(nextPage.Items) != 5 || nextPage.Items[0] != "192.168.10.7" {
+		t.Fatalf("unexpected second available page: %+v", nextPage)
+	}
+	emptyPage, err := ListAvailableIPs(ctx, db, subnet.ID, 1000, 5)
+	if err != nil || len(emptyPage.Items) != 0 {
+		t.Fatalf("unexpected offset page: %+v, %v", emptyPage, err)
+	}
+
 	updated, err := UpdateAllocation(ctx, db, allocation.ID, allocation.Version, AllocationFields{
 		IP: "192.168.10.99", AssetID: host.ID, Label: "gateway-vip", Status: "active",
 		DNSName: "vip.example.test", Role: "vip",

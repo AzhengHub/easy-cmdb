@@ -11,6 +11,7 @@ func (s *Server) registerIPAM(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/subnets/{id}", s.requireUser(true, s.saveSubnet))
 	mux.HandleFunc("DELETE /api/subnets/{id}", s.requireUser(true, s.deleteSubnet))
 	mux.HandleFunc("GET /api/subnets/{id}/addresses", s.requireUser(false, s.listSubnetAddresses))
+	mux.HandleFunc("GET /api/subnets/{id}/available-ips", s.requireUser(false, s.listAvailableIPs))
 	mux.HandleFunc("POST /api/subnets/{id}/allocations", s.requireUser(true, s.saveAllocation))
 	mux.HandleFunc("PUT /api/allocations/{id}", s.requireUser(true, s.updateAllocation))
 	mux.HandleFunc("DELETE /api/allocations/{id}", s.requireUser(true, s.deleteAllocation))
@@ -87,6 +88,36 @@ func (s *Server) listSubnetAddresses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, http.StatusOK, detail)
+}
+
+func (s *Server) listAvailableIPs(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	offset, limit := 0, 20
+	if raw := r.URL.Query().Get("offset"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 0 || value > 1_000_000 {
+			fail(w, http.StatusBadRequest, "分页偏移无效")
+			return
+		}
+		offset = value
+	}
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > 100 {
+			fail(w, http.StatusBadRequest, "每页数量须为 1–100")
+			return
+		}
+		limit = value
+	}
+	page, err := ListAvailableIPs(r.Context(), s.db, id, offset, limit)
+	if err != nil {
+		s.databaseError(w, err)
+		return
+	}
+	respond(w, http.StatusOK, page)
 }
 
 func (s *Server) saveAllocation(w http.ResponseWriter, r *http.Request) {
