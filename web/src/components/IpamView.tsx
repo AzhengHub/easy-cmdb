@@ -6,7 +6,7 @@ import {
 import type { TableColumnsType } from 'antd'
 import { CloseOutlined, DownOutlined, EditOutlined, PlusOutlined, ReloadOutlined, RightOutlined, SearchOutlined, StarFilled, StarOutlined } from '@ant-design/icons'
 import { api, APIError } from '../api'
-import type { Allocation, Asset, IPUsage, Subnet, SubnetDetail, SubnetFields, VLAN } from '../api'
+import type { Allocation, Asset, AvailableIPs, IPUsage, Subnet, SubnetDetail, SubnetFields, VLAN } from '../api'
 
 interface Props {
   editable: boolean
@@ -164,6 +164,11 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [freeItems, setFreeItems] = useState<string[]>([])
+  const [freeTotal, setFreeTotal] = useState(0)
+  const [freePage, setFreePage] = useState(1)
+  const [freePageSize, setFreePageSize] = useState(10)
+  const [freeLoading, setFreeLoading] = useState(false)
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
 
@@ -213,12 +218,30 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
     setError(e instanceof Error ? e.message : '操作失败')
   }
 
+  async function loadFree(id: number, page: number, size: number) {
+    setFreeLoading(true)
+    try {
+      const result = await api<AvailableIPs>(`/subnets/${id}/available-ips?offset=${(page - 1) * size}&limit=${size}`)
+      setFreeItems(result.items)
+      setFreeTotal(result.total)
+    } catch (e) {
+      report(e)
+    } finally {
+      setFreeLoading(false)
+    }
+  }
+
   async function loadDetail(id: number | null) {
     if (!id) {
       setDetail(null)
+      setFreeItems([])
+      setFreeTotal(0)
       return
     }
-    setDetail(await api<SubnetDetail>(`/subnets/${id}/addresses`))
+    const next = await api<SubnetDetail>(`/subnets/${id}/addresses`)
+    setDetail(next)
+    setFreePage(1)
+    await loadFree(next.id, 1, freePageSize)
   }
 
   async function load(preferredId?: number | null) {
@@ -253,6 +276,20 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
     } catch (e) {
       report(e)
     }
+  }
+
+  function changeFreePage(page: number, size: number) {
+    if (!detail) return
+    const nextSize = size || freePageSize
+    const nextPage = nextSize !== freePageSize ? 1 : page
+    setFreePage(nextPage)
+    setFreePageSize(nextSize)
+    void loadFree(detail.id, nextPage, nextSize)
+  }
+
+  function chooseFreeIP(ip: string) {
+    setAllocation({ ...allocation, ip })
+    document.getElementById('allocate-ip-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
   function toggleSubnet(id: number) {
@@ -398,6 +435,19 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
       setBusy(false)
     }
   }
+
+  const freeColumns: TableColumnsType<string> = [
+    {
+      title: '空闲 IP', key: 'ip',
+      render: (_, ip) => <span className="mono">{ip}</span>,
+    },
+    ...(editable ? [{
+      title: '操作', key: 'actions', width: 110,
+      render: (_: unknown, ip: string) => (
+        <Button type="link" size="small" onClick={() => chooseFreeIP(ip)}>分配此地址</Button>
+      ),
+    }] : []),
+  ]
 
   const usageColumns: TableColumnsType<IPUsage> = [
     { title: 'IP 地址', dataIndex: 'ip', key: 'ip', width: 135, render: value => <span className="mono">{value}</span> },
@@ -572,7 +622,7 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
                 <Progress percent={utilization} size="small" className="usage-progress" />
 
                 {editable && (
-                  <Card size="small" title="分配 IP" className="allocate-card">
+                  <Card size="small" title="分配 IP" className="allocate-card" id="allocate-ip-card">
                     <Form layout="vertical" onFinish={() => void allocate()}>
                       <Row gutter={12}>
                         <Col span={12}><Form.Item label="IP 地址"><Input value={allocation.ip} maxLength={64} placeholder="例如：192.168.10.20" onChange={event => setAllocation({ ...allocation, ip: event.target.value })} /></Form.Item></Col>
@@ -632,14 +682,21 @@ export function IpamView({ editable, openSubnetId, onSubnetOpened, bookmarkedSub
 
                 <div className="section-head">
                   <h3>空闲 IP</h3>
-                  <span className="muted">显示前 {detail.freeIps.length} 个 / 共 {count(detail.free)} 个</span>
+                  <span className="muted">共 {count(freeTotal)} 个 · 分页浏览，点击“分配此地址”填入上方表单</span>
                 </div>
-                <Space wrap>
-                  {detail.freeIps.map(ip => (
-                    <Button key={ip} size="small" className="mono" disabled={!editable} onClick={() => setAllocation({ ...allocation, ip })}>{ip}</Button>
-                  ))}
-                </Space>
-                {!detail.freeIps.length && <Empty description="该网段已无空闲 IP" />}
+                <Table<string>
+                  className="free-ip-table"
+                  columns={freeColumns} dataSource={freeItems} rowKey={ip => ip}
+                  loading={freeLoading} size="small"
+                  locale={{ emptyText: detail.free ? '正在加载空闲 IP…' : '该网段已无空闲 IP' }}
+                  pagination={{
+                    current: freePage, pageSize: freePageSize, total: freeTotal,
+                    showSizeChanger: true, pageSizeOptions: ['10', '20', '50'],
+                    showQuickJumper: freeTotal > 100,
+                    showTotal: total => `共 ${count(total)} 个空闲地址`,
+                    onChange: changeFreePage,
+                  }}
+                />
               </>
             ) : <Empty description="选择左侧网段查看地址" />}
           </div>

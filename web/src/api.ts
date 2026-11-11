@@ -123,6 +123,13 @@ export interface SubnetDetail extends Subnet {
   freeIps: string[]
 }
 
+export interface AvailableIPs {
+  items: string[]
+  total: number
+  offset: number
+  limit: number
+}
+
 export interface Change {
   id: number
   assetId: number
