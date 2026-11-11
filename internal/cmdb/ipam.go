@@ -7,15 +7,33 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 )
 
 const (
-	subnetColumns = "id,name,cidr,gateway,vlan,notes,version"
-	freeIPLimit   = 50
+	subnetColumns = `s.id,s.name,s.cidr,s.gateway,s.vlan,s.notes,s.status,s.role,s.version,
+		COALESCE(v.name,''),COALESCE(v.status,'')`
+	subnetFrom  = `subnets s LEFT JOIN vlans v ON v.vid = CAST(s.vlan AS INTEGER)`
+	freeIPLimit = 50
+)
+
+var (
+	subnetStatuses = map[string]bool{
+		"container": true, "active": true, "reserved": true, "deprecated": true,
+	}
+	allocationStatuses = map[string]bool{
+		"active": true, "reserved": true, "deprecated": true, "dhcp": true, "slaac": true,
+	}
+	allocationRoles = map[string]bool{
+		"": true, "loopback": true, "secondary": true, "vip": true,
+		"vrrp": true, "hsrp": true, "glbp": true, "anycast": true,
+	}
+	dnsNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_]([a-zA-Z0-9_-]{0,62})(\.[a-zA-Z0-9_]([a-zA-Z0-9_-]{0,62}))*\.?$`)
 )
 
 type SubnetFields struct {
@@ -24,15 +42,19 @@ type SubnetFields struct {
 	Gateway string `json:"gateway"`
 	VLAN    string `json:"vlan"`
 	Notes   string `json:"notes"`
+	Status  string `json:"status"`
+	Role    string `json:"role"`
 }
 
 type Subnet struct {
 	SubnetFields
-	ID      int64 `json:"id"`
-	Version int   `json:"version"`
-	Usable  int64 `json:"usable"`
-	Used    int64 `json:"used"`
-	Free    int64 `json:"free"`
+	ID         int64  `json:"id"`
+	Version    int    `json:"version"`
+	VLANName   string `json:"vlanName,omitempty"`
+	VLANStatus string `json:"vlanStatus,omitempty"`
+	Usable     int64  `json:"usable"`
+	Used       int64  `json:"used"`
+	Free       int64  `json:"free"`
 }
 
 type AllocationFields struct {
@@ -40,23 +62,30 @@ type AllocationFields struct {
 	AssetID int64  `json:"assetId,omitempty"`
 	Label   string `json:"label"`
 	Notes   string `json:"notes"`
+	Status  string `json:"status"`
+	DNSName string `json:"dnsName"`
+	Role    string `json:"role"`
 }
 
 type Allocation struct {
 	AllocationFields
-	ID        int64  `json:"id"`
-	SubnetID  int64  `json:"subnetId"`
-	Version   int    `json:"version"`
-	AssetName string `json:"assetName,omitempty"`
+	ID         int64  `json:"id"`
+	SubnetID   int64  `json:"subnetId"`
+	SubnetName string `json:"subnetName,omitempty"`
+	Version    int    `json:"version"`
+	AssetName  string `json:"assetName,omitempty"`
 }
 
 type IPUsage struct {
 	IP           string `json:"ip"`
-	Status       string `json:"status"`
+	Source       string `json:"source"`
+	State        string `json:"state"`
 	AssetID      int64  `json:"assetId,omitempty"`
 	AssetName    string `json:"assetName,omitempty"`
 	AllocationID int64  `json:"allocationId,omitempty"`
 	Label        string `json:"label,omitempty"`
+	DNSName      string `json:"dnsName,omitempty"`
+	Role         string `json:"role,omitempty"`
 	Notes        string `json:"notes,omitempty"`
 	Version      int    `json:"version,omitempty"`
 }
@@ -74,17 +103,18 @@ type assetRef struct {
 
 type queryer interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
 func readSubnet(row scanner) (Subnet, error) {
 	var subnet Subnet
-	err := row.Scan(&subnet.ID, &subnet.Name, &subnet.CIDR, &subnet.Gateway,
-		&subnet.VLAN, &subnet.Notes, &subnet.Version)
+	err := row.Scan(&subnet.ID, &subnet.Name, &subnet.CIDR, &subnet.Gateway, &subnet.VLAN,
+		&subnet.Notes, &subnet.Status, &subnet.Role, &subnet.Version, &subnet.VLANName, &subnet.VLANStatus)
 	return subnet, err
 }
 
 func ListSubnets(ctx context.Context, db *sql.DB) ([]Subnet, error) {
-	rows, err := db.QueryContext(ctx, "SELECT "+subnetColumns+" FROM subnets ORDER BY lower(name), id")
+	rows, err := db.QueryContext(ctx, "SELECT "+subnetColumns+" FROM "+subnetFrom+" ORDER BY lower(s.name), s.id")
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +150,8 @@ func ListSubnets(ctx context.Context, db *sql.DB) ([]Subnet, error) {
 }
 
 func GetSubnet(ctx context.Context, db *sql.DB, id int64) (SubnetDetail, error) {
-	subnet, err := readSubnet(db.QueryRowContext(ctx, "SELECT "+subnetColumns+" FROM subnets WHERE id=$1", id))
+	subnet, err := readSubnet(db.QueryRowContext(ctx,
+		"SELECT "+subnetColumns+" FROM "+subnetFrom+" WHERE s.id=$1", id))
 	if err != nil {
 		return SubnetDetail{}, err
 	}
@@ -144,7 +175,8 @@ func GetSubnet(ctx context.Context, db *sql.DB, id int64) (SubnetDetail, error) 
 			continue
 		}
 		used[addr] = IPUsage{
-			IP: addr.String(), Status: "asset", AssetID: refs[0].ID, AssetName: refs[0].Name,
+			IP: addr.String(), Source: "asset", State: "active",
+			AssetID: refs[0].ID, AssetName: refs[0].Name,
 		}
 	}
 	for _, allocation := range allocations {
@@ -153,14 +185,15 @@ func GetSubnet(ctx context.Context, db *sql.DB, id int64) (SubnetDetail, error) 
 			continue
 		}
 		used[addr] = IPUsage{
-			IP: addr.String(), Status: "allocated", AssetID: allocation.AssetID,
-			AssetName: allocation.AssetName, AllocationID: allocation.ID,
-			Label: allocation.Label, Notes: allocation.Notes, Version: allocation.Version,
+			IP: addr.String(), Source: "allocated", State: allocation.Status,
+			AssetID: allocation.AssetID, AssetName: allocation.AssetName,
+			AllocationID: allocation.ID, Label: allocation.Label, DNSName: allocation.DNSName,
+			Role: allocation.Role, Notes: allocation.Notes, Version: allocation.Version,
 		}
 	}
 	if subnet.Gateway != "" {
 		if gateway, err := netip.ParseAddr(subnet.Gateway); err == nil {
-			used[gateway] = IPUsage{IP: gateway.String(), Status: "gateway", Label: "网关"}
+			used[gateway] = IPUsage{IP: gateway.String(), Source: "gateway", State: "active", Label: "网关"}
 		}
 	}
 
@@ -197,17 +230,24 @@ func SaveSubnet(ctx context.Context, db *sql.DB, id int64, fields SubnetFields, 
 	if err := checkSubnetOverlap(ctx, tx, id, prefix); err != nil {
 		return Subnet{}, err
 	}
+	vlan, err := canonicalVLAN(ctx, tx, fields.VLAN)
+	if err != nil {
+		return Subnet{}, err
+	}
+	fields.VLAN = vlan
 
 	var before Subnet
 	action := "subnet_create"
 	subnet := Subnet{SubnetFields: fields, Usable: usableCount(prefix)}
 	if id == 0 {
 		err = tx.QueryRowContext(ctx, `
-			INSERT INTO subnets (name,cidr,gateway,vlan,notes)
-			VALUES ($1,$2,$3,$4,$5) RETURNING id,version`,
-			fields.Name, fields.CIDR, fields.Gateway, fields.VLAN, fields.Notes).Scan(&subnet.ID, &subnet.Version)
+			INSERT INTO subnets (name,cidr,gateway,vlan,notes,status,role)
+			VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id,version`,
+			fields.Name, fields.CIDR, fields.Gateway, fields.VLAN, fields.Notes,
+			fields.Status, fields.Role).Scan(&subnet.ID, &subnet.Version)
 	} else {
-		before, err = readSubnet(tx.QueryRowContext(ctx, "SELECT "+subnetColumns+" FROM subnets WHERE id=$1", id))
+		before, err = readSubnet(tx.QueryRowContext(ctx,
+			"SELECT "+subnetColumns+" FROM "+subnetFrom+" WHERE s.id=$1", id))
 		if err != nil {
 			return Subnet{}, err
 		}
@@ -225,13 +265,21 @@ func SaveSubnet(ctx context.Context, db *sql.DB, id int64, fields SubnetFields, 
 		}
 		action = "subnet_update"
 		err = tx.QueryRowContext(ctx, `
-			UPDATE subnets SET name=$2,cidr=$3,gateway=$4,vlan=$5,notes=$6,version=version+1
+			UPDATE subnets SET name=$2,cidr=$3,gateway=$4,vlan=$5,notes=$6,status=$7,role=$8,
+				version=version+1
 			WHERE id=$1 RETURNING version`,
-			id, fields.Name, fields.CIDR, fields.Gateway, fields.VLAN, fields.Notes).Scan(&subnet.Version)
+			id, fields.Name, fields.CIDR, fields.Gateway, fields.VLAN, fields.Notes,
+			fields.Status, fields.Role).Scan(&subnet.Version)
 		subnet.ID = id
 	}
 	if err != nil {
 		return Subnet{}, err
+	}
+	if fields.VLAN != "" {
+		if vlanErr := tx.QueryRowContext(ctx,
+			"SELECT name,status FROM vlans WHERE vid=$1", fields.VLAN).Scan(&subnet.VLANName, &subnet.VLANStatus); vlanErr != nil && !errors.Is(vlanErr, sql.ErrNoRows) {
+			return Subnet{}, vlanErr
+		}
 	}
 	old := any(nil)
 	if id != 0 {
@@ -240,7 +288,13 @@ func SaveSubnet(ctx context.Context, db *sql.DB, id int64, fields SubnetFields, 
 	if err := writeNamedChange(ctx, tx, nil, subnet.Name, actor, action, old, subnet.SubnetFields); err != nil {
 		return Subnet{}, err
 	}
-	return subnet, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return Subnet{}, err
+	}
+	if detail, detailErr := GetSubnet(ctx, db, subnet.ID); detailErr == nil {
+		subnet.Usable, subnet.Used, subnet.Free = detail.Usable, detail.Used, detail.Free
+	}
+	return subnet, nil
 }
 
 func DeleteSubnet(ctx context.Context, db *sql.DB, id int64, version int, actor string) error {
@@ -249,7 +303,8 @@ func DeleteSubnet(ctx context.Context, db *sql.DB, id int64, version int, actor 
 		return err
 	}
 	defer tx.Rollback()
-	subnet, err := readSubnet(tx.QueryRowContext(ctx, "SELECT "+subnetColumns+" FROM subnets WHERE id=$1", id))
+	subnet, err := readSubnet(tx.QueryRowContext(ctx,
+		"SELECT "+subnetColumns+" FROM "+subnetFrom+" WHERE s.id=$1", id))
 	if err != nil {
 		return err
 	}
@@ -274,10 +329,8 @@ func DeleteSubnet(ctx context.Context, db *sql.DB, id int64, version int, actor 
 
 func SaveAllocation(ctx context.Context, db *sql.DB, subnetID int64, fields AllocationFields, actor string) (Allocation, error) {
 	fields.IP = strings.TrimSpace(fields.IP)
-	fields.Label = strings.TrimSpace(fields.Label)
-	fields.Notes = strings.TrimSpace(fields.Notes)
-	if len(fields.Label) > 160 || len(fields.Notes) > 2000 {
-		return Allocation{}, invalidFacility("标签或备注超出长度限制")
+	if err := normalizeAllocationFields(&fields); err != nil {
+		return Allocation{}, err
 	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -285,7 +338,8 @@ func SaveAllocation(ctx context.Context, db *sql.DB, subnetID int64, fields Allo
 	}
 	defer tx.Rollback()
 
-	subnet, err := readSubnet(tx.QueryRowContext(ctx, "SELECT "+subnetColumns+" FROM subnets WHERE id=$1", subnetID))
+	subnet, err := readSubnet(tx.QueryRowContext(ctx,
+		"SELECT "+subnetColumns+" FROM "+subnetFrom+" WHERE s.id=$1", subnetID))
 	if err != nil {
 		return Allocation{}, err
 	}
@@ -315,8 +369,8 @@ func SaveAllocation(ctx context.Context, db *sql.DB, subnetID int64, fields Allo
 	}
 	var exists bool
 	if err := tx.QueryRowContext(ctx,
-		"SELECT EXISTS (SELECT 1 FROM ip_allocations WHERE subnet_id=$1 AND ip=$2)",
-		subnetID, addr.String()).Scan(&exists); err != nil {
+		"SELECT EXISTS (SELECT 1 FROM ip_allocations WHERE ip=$1)",
+		addr.String()).Scan(&exists); err != nil {
 		return Allocation{}, err
 	}
 	if exists {
@@ -324,7 +378,7 @@ func SaveAllocation(ctx context.Context, db *sql.DB, subnetID int64, fields Allo
 	}
 
 	allocation := Allocation{
-		AllocationFields: fields, SubnetID: subnetID, Version: 1,
+		AllocationFields: fields, SubnetID: subnetID, SubnetName: subnet.Name, Version: 1,
 	}
 	if fields.AssetID != 0 {
 		var name string
@@ -338,9 +392,10 @@ func SaveAllocation(ctx context.Context, db *sql.DB, subnetID int64, fields Allo
 	}
 	allocation.IP = addr.String()
 	err = tx.QueryRowContext(ctx, `
-		INSERT INTO ip_allocations (subnet_id,ip,asset_id,label,notes)
-		VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-		allocation.SubnetID, allocation.IP, nullID(allocation.AssetID), allocation.Label, allocation.Notes).Scan(&allocation.ID)
+		INSERT INTO ip_allocations (subnet_id,ip,asset_id,label,notes,status,dns_name,role)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+		allocation.SubnetID, allocation.IP, nullID(allocation.AssetID), allocation.Label,
+		allocation.Notes, allocation.Status, allocation.DNSName, allocation.Role).Scan(&allocation.ID)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return Allocation{}, invalidFacility("该 IP 已分配")
@@ -353,22 +408,72 @@ func SaveAllocation(ctx context.Context, db *sql.DB, subnetID int64, fields Allo
 	return allocation, tx.Commit()
 }
 
+func UpdateAllocation(ctx context.Context, db *sql.DB, id int64, version int, fields AllocationFields, actor string) (Allocation, error) {
+	if err := normalizeAllocationFields(&fields); err != nil {
+		return Allocation{}, err
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return Allocation{}, err
+	}
+	defer tx.Rollback()
+
+	before, err := readAllocation(tx.QueryRowContext(ctx, `
+		SELECT a.id,a.subnet_id,a.ip,COALESCE(a.asset_id,0),COALESCE(b.name,''),a.label,a.notes,
+			a.status,a.dns_name,a.role,a.version,s.name
+		FROM ip_allocations a
+		JOIN subnets s ON s.id=a.subnet_id
+		LEFT JOIN assets b ON b.id=a.asset_id
+		WHERE a.id=$1`, id))
+	if err != nil {
+		return Allocation{}, err
+	}
+	if before.Version != version {
+		return Allocation{}, ErrConflict
+	}
+	if fields.AssetID != 0 {
+		var name string
+		if err := tx.QueryRowContext(ctx, "SELECT name FROM assets WHERE id=$1", fields.AssetID).Scan(&name); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return Allocation{}, invalidFacility("关联资产不存在")
+			}
+			return Allocation{}, err
+		}
+	}
+	fields.IP = before.IP
+	if fields.AssetID == before.AssetID && fields.Label == before.Label && fields.Notes == before.Notes &&
+		fields.Status == before.Status && fields.DNSName == before.DNSName && fields.Role == before.Role {
+		return before, tx.Commit()
+	}
+	allocation, err := readAllocation(tx.QueryRowContext(ctx, `
+		UPDATE ip_allocations SET asset_id=$2,label=$3,notes=$4,status=$5,dns_name=$6,role=$7,
+			version=version+1 WHERE id=$1
+		RETURNING id,subnet_id,ip,COALESCE(asset_id,0),
+			COALESCE((SELECT name FROM assets WHERE id=asset_id),''),label,notes,status,dns_name,role,version,
+			COALESCE((SELECT name FROM subnets WHERE id=subnet_id),'')`,
+		id, nullID(fields.AssetID), fields.Label, fields.Notes, fields.Status, fields.DNSName, fields.Role))
+	if err != nil {
+		return Allocation{}, err
+	}
+	if err := writeNamedChange(ctx, tx, nil, allocation.SubnetName, actor, "ip_update", before, allocation); err != nil {
+		return Allocation{}, err
+	}
+	return allocation, tx.Commit()
+}
+
 func DeleteAllocation(ctx context.Context, db *sql.DB, id int64, version int, actor string) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	var allocation Allocation
-	var subnetName string
-	err = tx.QueryRowContext(ctx, `
-		SELECT a.id,a.subnet_id,a.ip,COALESCE(a.asset_id,0),COALESCE(b.name,''),a.label,a.notes,a.version,s.name
+	allocation, err := readAllocation(tx.QueryRowContext(ctx, `
+		SELECT a.id,a.subnet_id,a.ip,COALESCE(a.asset_id,0),COALESCE(b.name,''),a.label,a.notes,
+			a.status,a.dns_name,a.role,a.version,s.name
 		FROM ip_allocations a
 		JOIN subnets s ON s.id=a.subnet_id
 		LEFT JOIN assets b ON b.id=a.asset_id
-		WHERE a.id=$1`, id).Scan(&allocation.ID, &allocation.SubnetID, &allocation.IP,
-		&allocation.AssetID, &allocation.AssetName, &allocation.Label, &allocation.Notes,
-		&allocation.Version, &subnetName)
+		WHERE a.id=$1`, id))
 	if err != nil {
 		return err
 	}
@@ -378,10 +483,18 @@ func DeleteAllocation(ctx context.Context, db *sql.DB, id int64, version int, ac
 	if _, err := tx.ExecContext(ctx, "DELETE FROM ip_allocations WHERE id=$1", id); err != nil {
 		return err
 	}
-	if err := writeNamedChange(ctx, tx, nil, subnetName, actor, "ip_release", allocation, nil); err != nil {
+	if err := writeNamedChange(ctx, tx, nil, allocation.SubnetName, actor, "ip_release", allocation, nil); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+func readAllocation(row scanner) (Allocation, error) {
+	var allocation Allocation
+	err := row.Scan(&allocation.ID, &allocation.SubnetID, &allocation.IP, &allocation.AssetID,
+		&allocation.AssetName, &allocation.Label, &allocation.Notes, &allocation.Status,
+		&allocation.DNSName, &allocation.Role, &allocation.Version, &allocation.SubnetName)
+	return allocation, err
 }
 
 func normalizeSubnetFields(fields *SubnetFields) (netip.Prefix, error) {
@@ -390,15 +503,26 @@ func normalizeSubnetFields(fields *SubnetFields) (netip.Prefix, error) {
 	fields.Gateway = strings.TrimSpace(fields.Gateway)
 	fields.VLAN = strings.TrimSpace(fields.VLAN)
 	fields.Notes = strings.TrimSpace(fields.Notes)
+	fields.Status = strings.TrimSpace(fields.Status)
+	fields.Role = strings.TrimSpace(fields.Role)
 	if nameLen := utf8.RuneCountInString(fields.Name); nameLen < 1 || nameLen > 160 {
 		return netip.Prefix{}, invalidFacility("网段名称须为 1–160 个字符")
+	}
+	if fields.Status == "" {
+		fields.Status = "active"
+	}
+	if !subnetStatuses[fields.Status] {
+		return netip.Prefix{}, invalidFacility("网段状态无效")
+	}
+	if utf8.RuneCountInString(fields.Role) > 80 {
+		return netip.Prefix{}, invalidFacility("网段用途不能超过 80 个字符")
 	}
 	prefix, err := parseSubnet(fields.CIDR)
 	if err != nil {
 		return netip.Prefix{}, err
 	}
 	fields.CIDR = prefix.String()
-	if len(fields.VLAN) > 32 || len(fields.Notes) > 2000 {
+	if len(fields.VLAN) > 80 || len(fields.Notes) > 2000 {
 		return netip.Prefix{}, invalidFacility("VLAN 或备注超出长度限制")
 	}
 	if fields.Gateway != "" {
@@ -413,6 +537,55 @@ func normalizeSubnetFields(fields *SubnetFields) (netip.Prefix, error) {
 		fields.Gateway = gateway.String()
 	}
 	return prefix, nil
+}
+
+func normalizeAllocationFields(fields *AllocationFields) error {
+	fields.Label = strings.TrimSpace(fields.Label)
+	fields.Notes = strings.TrimSpace(fields.Notes)
+	fields.Status = strings.TrimSpace(fields.Status)
+	fields.DNSName = strings.TrimSpace(fields.DNSName)
+	fields.Role = strings.TrimSpace(fields.Role)
+	if fields.Status == "" {
+		fields.Status = "active"
+	}
+	if !allocationStatuses[fields.Status] {
+		return invalidFacility("IP 地址状态无效")
+	}
+	if !allocationRoles[fields.Role] {
+		return invalidFacility("IP 地址角色无效")
+	}
+	if len(fields.Label) > 160 || len(fields.Notes) > 2000 {
+		return invalidFacility("标签或备注超出长度限制")
+	}
+	if len(fields.DNSName) > 255 {
+		return invalidFacility("DNS 名称不能超过 255 个字符")
+	}
+	if fields.DNSName != "" && !dnsNamePattern.MatchString(fields.DNSName) {
+		return invalidFacility("DNS 名称格式无效，请填写主机名或完整域名")
+	}
+	return nil
+}
+
+func canonicalVLAN(ctx context.Context, q queryer, value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	vid, err := strconv.Atoi(value)
+	if err != nil {
+		vid = 0
+	}
+	var matched int
+	err = q.QueryRowContext(ctx,
+		`SELECT vid FROM vlans WHERE vid=$1 OR lower(name)=lower($2) ORDER BY vid LIMIT 1`,
+		vid, value).Scan(&matched)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", invalidFacility("VLAN " + value + " 未登记，请先在 VLAN 管理中创建")
+	}
+	if err != nil {
+		return "", err
+	}
+	return strconv.Itoa(matched), nil
 }
 
 func parseSubnet(value string) (netip.Prefix, error) {
@@ -552,8 +725,11 @@ func loadAllocationIPs(ctx context.Context, q queryer) (map[int64][]netip.Addr, 
 
 func loadSubnetAllocations(ctx context.Context, q queryer, subnetID int64) ([]Allocation, error) {
 	rows, err := q.QueryContext(ctx, `
-		SELECT a.id,a.subnet_id,a.ip,COALESCE(a.asset_id,0),COALESCE(b.name,''),a.label,a.notes,a.version
-		FROM ip_allocations a LEFT JOIN assets b ON b.id=a.asset_id
+		SELECT a.id,a.subnet_id,a.ip,COALESCE(a.asset_id,0),COALESCE(b.name,''),a.label,a.notes,
+			a.status,a.dns_name,a.role,a.version,s.name
+		FROM ip_allocations a
+		JOIN subnets s ON s.id=a.subnet_id
+		LEFT JOIN assets b ON b.id=a.asset_id
 		WHERE a.subnet_id=$1 ORDER BY a.ip`, subnetID)
 	if err != nil {
 		return nil, err
@@ -561,9 +737,8 @@ func loadSubnetAllocations(ctx context.Context, q queryer, subnetID int64) ([]Al
 	defer rows.Close()
 	allocations := make([]Allocation, 0)
 	for rows.Next() {
-		var allocation Allocation
-		if err := rows.Scan(&allocation.ID, &allocation.SubnetID, &allocation.IP, &allocation.AssetID,
-			&allocation.AssetName, &allocation.Label, &allocation.Notes, &allocation.Version); err != nil {
+		allocation, err := readAllocation(rows)
+		if err != nil {
 			return nil, err
 		}
 		allocations = append(allocations, allocation)
@@ -588,9 +763,8 @@ func checkSubnetOverlap(ctx context.Context, q queryer, id int64, prefix netip.P
 			return err
 		}
 		if prefix.Overlaps(other) {
-			// CIDR blocks are either disjoint or nested. Allow a parent prefix
-			// to aggregate child prefixes (NetBox-style prefix hierarchy), but
-			// still reject the same prefix twice.
+			// CIDR blocks are either disjoint or nested. A parent prefix may
+			// aggregate child prefixes, but the same prefix cannot be added twice.
 			if prefix.Addr() == other.Addr() && prefix.Bits() == other.Bits() {
 				return invalidFacility(fmt.Sprintf("网段 %s 已存在", otherCIDR))
 			}
