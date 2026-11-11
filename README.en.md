@@ -1,7 +1,5 @@
 # dc-db
 
-[![CI](https://github.com/dc-db/dc-db/actions/workflows/ci.yml/badge.svg)](https://github.com/dc-db/dc-db/actions/workflows/ci.yml)
-
 [简体中文](README.md)
 
 dc-db is a simple, easy-to-use configuration management database for IT assets, infrastructure configuration, and asset relationships. It targets small, single-node operations: around 3,000 virtual machines with a total footprint under 5,000 hosts, maintained by a small operations team. The design goal is simple, sufficient, and easy to maintain: no extra middleware and no large-cluster ambitions. It tracks physical hosts, virtual machines, and switches, with a home dashboard, asset search, relationship views, CSV import and export, IPAM subnet and address management, access controls, change history, and data center/rack views.
