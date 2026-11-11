@@ -2,7 +2,7 @@
 
 [简体中文](README.md)
 
-dc-db is a simple, easy-to-use configuration management database for IT assets, infrastructure configuration, and asset relationships. It targets small, single-node operations: around 3,000 virtual machines with a total footprint under 5,000 hosts, maintained by a small operations team. The design goal is simple, sufficient, and easy to maintain: no extra middleware and no large-cluster ambitions. It tracks physical hosts, virtual machines, and switches, with a home dashboard, asset search, relationship views, CSV import and export, IPAM subnet and address management, access controls, change history, and data center/rack views.
+dc-db is a simple, easy-to-use configuration management database for IT assets, infrastructure configuration, and asset relationships. It targets small, single-node operations: around 3,000 virtual machines with a total footprint under 5,000 hosts, maintained by a small operations team. The design goal is simple, sufficient, and easy to maintain: no extra middleware and no large-cluster ambitions. It tracks physical hosts, virtual machines, and switches, with a home dashboard, asset search, relationship views, CSV import and export, IPAM subnet, VLAN, and address management, access controls, change history, and data center/rack views.
 
 dc-db uses Go, React 19 with TypeScript, Ant Design 6, ECharts, and SQLite. One Go binary, the built `web/dist` assets, and one SQLite file are all it needs; there is no separate database service to deploy. The current release uses SQLite, and a MySQL or PostgreSQL backend can be added later if needed.
 
@@ -153,18 +153,25 @@ Import rules:
 
 Exported CSV files use the same columns and can be used as a reference when preparing an import.
 
-Asset details are organized into overview, relationships, custom attributes, and change history tabs, with a relationship graph in the relationships tab. Custom attributes use a key-value editor with text, number, boolean, and JSON value types. Assets can carry multiple colored tags: maintain tags under `System → Tags`, then select them from the asset detail `Tags` button. Tags appear in the asset list and can be used as a filter; with multiple tags you can choose all-of or any-of matching, and saved filter presets keep both the tag array and match mode. The global search also finds tags by name or description. Select multiple assets to add, remove, or replace tags in bulk. Star assets from the list or detail view to keep them in the dashboard `My favorites` shortcut. The dashboard also charts tag usage. The asset list supports status filters, saved filter presets, configurable columns, click-to-sort headers, and 10/20/50 page sizes. Select multiple assets to bulk-edit status, platform, lifecycle, owner, and environment. The global header search covers assets, IP addresses, data centers, racks, and subnets, shows the last six searches when empty, and can jump to `All assets` with the current keyword.
+Asset details are organized into overview, relationships, custom attributes, and change history tabs, with a relationship graph in the relationships tab. Custom attributes use a key-value editor with text, number, boolean, and JSON value types. Assets can carry multiple colored tags: maintain tags under `System → Tags`, then select them from the asset detail `Tags` button. Tags appear in the asset list and can be used as a filter; with multiple tags you can choose all-of or any-of matching, and saved filter presets keep both the tag array and match mode. The global search also finds tags by name or description. Select multiple assets to add, remove, or replace tags in bulk. Star assets from the list or detail view to keep them in the dashboard `My favorites` shortcut. The dashboard also charts tag usage. The asset list supports status filters, saved filter presets, configurable columns, click-to-sort headers, and 10/20/50 page sizes. Select multiple assets to bulk-edit status, platform, lifecycle, owner, and environment. The global header search covers assets, IP addresses, data centers, racks, subnets, and VLANs, shows the last six searches when empty, and can jump to `All assets` with the current keyword.
 
 ## IP address management
 
-Add a subnet with its CIDR, gateway, and VLAN under `IPAM`. The subnet tree can be searched by name, CIDR, gateway, or VLAN. Addresses found in asset `address` fields are counted automatically, and you can also allocate or release IPs and link them to assets.
+`IPAM` is organized into `Subnets & IPs`, `IP addresses`, and `VLANs`.
+
+The VLAN inventory records a VLAN ID (1–4094), name, status, optional data center, and description. A subnet selects a registered VLAN from a drop-down; a VLAN ID cannot be changed and a VLAN cannot be deleted while a subnet still references it, so prefixes never point at missing VLANs.
+
+A subnet stores its CIDR, gateway, status (container, active, reserved, or deprecated), purpose, and VLAN. The subnet tree can be searched by name, CIDR, VLAN, or purpose and filtered by status. Addresses found in asset `address` fields are counted automatically, and you can also allocate or release IPs and link them to assets.
+
+The IP addresses view combines manual allocations, asset addresses, and gateway addresses, with filters for subnet, source, status, and keyword. Manual allocations support status (active, reserved, deprecated, DHCP, or SLAAC), DNS name, role (loopback, secondary, VIP, VRRP, HSRP, GLBP, or anycast), linked asset, purpose, and notes, and can be edited or released.
 
 - IPv4 `/8` through `/30`; partial overlaps are rejected, while a parent prefix may contain child prefixes;
 - Asset addresses may contain multiple IPs separated by commas, semicolons, or spaces;
 - Used addresses include the gateway, asset addresses, and manual allocations;
 - The first 50 free addresses are listed, while the total free count is calculated from the subnet size;
 - The gateway cannot be allocated again, and an address already present in an asset does not need a duplicate allocation;
-- Subnet and IP allocation changes appear in change history.
+- DNS names are validated as host names or fully qualified domain names;
+- Subnet, VLAN, and IP allocation changes appear in change history with field-level differences.
 
 ## Data center layouts
 
