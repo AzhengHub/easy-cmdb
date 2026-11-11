@@ -263,3 +263,13 @@ func (s *Server) requireUser(write bool, next http.HandlerFunc) http.HandlerFunc
 func currentUser(r *http.Request) User {
 	return r.Context().Value(userKey{}).(User)
 }
+
+func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return s.requireUser(false, func(w http.ResponseWriter, r *http.Request) {
+		if currentUser(r).Role != "admin" {
+			fail(w, http.StatusForbidden, "仅管理员可以管理账号")
+			return
+		}
+		next(w, r)
+	})
+}

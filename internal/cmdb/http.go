@@ -39,6 +39,10 @@ func NewServer(db *sql.DB, secureCookie bool, frontend http.Handler) http.Handle
 	mux.HandleFunc("GET /api/me", s.requireUser(false, func(w http.ResponseWriter, r *http.Request) {
 		respond(w, http.StatusOK, currentUser(r))
 	}))
+	mux.HandleFunc("GET /api/users", s.requireAdmin(s.listUsers))
+	mux.HandleFunc("POST /api/users", s.requireAdmin(s.createUser))
+	mux.HandleFunc("PUT /api/users/{username}", s.requireAdmin(s.updateUser))
+	mux.HandleFunc("DELETE /api/users/{username}", s.requireAdmin(s.deleteUser))
 	mux.HandleFunc("GET /api/assets", s.requireUser(false, s.listAssets))
 	mux.HandleFunc("GET /api/search", s.requireUser(false, s.search))
 	mux.HandleFunc("POST /api/assets/bulk", s.requireUser(true, s.bulkUpdateAssets))
