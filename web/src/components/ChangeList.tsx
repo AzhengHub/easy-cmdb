@@ -28,6 +28,7 @@ const fieldLabels: Record<string, string> = {
   columns: '数据中心列数', rows: '数据中心行数', heightU: '机柜高度（U）', column: '机柜所在列', row: '机柜所在行', rotation: '朝向',
   cidr: 'CIDR', gateway: '网关', vlan: 'VLAN', ip: 'IP 地址', assetId: '关联资产', label: '标签',
   role: '角色', dnsName: 'DNS 名称', vid: 'VLAN ID', description: '描述', roomId: '所属数据中心',
+  face: '安装面', depth: '安装深度',
 }
 const relationLabels: Record<string, string> = { hosts: '承载' }
 
@@ -68,7 +69,8 @@ function summary(change: Change) {
       const start = Number(value.startU)
       const end = start + Number(value.units) - 1
       const units = start === end ? 'U' + start : 'U' + start + '–U' + end
-      return [value.roomName, value.rackName, units].join(' / ')
+      const mounting = [value.face === 'rear' ? '后面' : '前面', value.depth === 'half' ? '半深' : '全深'].join(' · ')
+      return [value.roomName, value.rackName, units, mounting].join(' / ')
     }
     return [position(change.before), position(change.after)].filter(Boolean).join(' → ')
   }

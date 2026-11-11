@@ -1,6 +1,7 @@
 import { ClusterOutlined, CloudServerOutlined, RightOutlined } from '@ant-design/icons'
 import { Empty, Progress } from 'antd'
 import type { Asset } from '../api'
+import { occupiedUnits, placementFaceLabel } from '../facilities'
 import type { Placement, Rack } from '../facilities'
 
 interface Props {
@@ -26,7 +27,7 @@ export function RackCardGrid({ racks, placements, assets, keyword, onOpen }: Pro
     <div className="rack-card-grid">
       {filtered.map(rack => {
         const devices = placements.filter(item => item.rackId === rack.id)
-        const used = devices.reduce((sum, item) => sum + item.units, 0)
+        const used = occupiedUnits(devices).size
         const percent = Math.round(used / rack.heightU * 100)
         return (
           <button key={rack.id} type="button" className="rack-card" onClick={() => onOpen(rack.id)}>
@@ -43,12 +44,18 @@ export function RackCardGrid({ racks, placements, assets, keyword, onOpen }: Pro
                     const asset = assets.get(device.assetId)
                     const top = (rack.heightU - (device.startU + device.units - 1)) / rack.heightU * 100
                     const height = device.units / rack.heightU * 100
+                    const half = device.depth === 'half'
                     return (
                       <span
                         key={device.assetId}
-                        className={`mini-rack-device ${asset?.kind === 'switch' ? 'switch' : 'host'}`}
-                        style={{ top: `${top}%`, height: `${height}%` }}
-                        title={asset?.name}
+                        className={`mini-rack-device ${asset?.kind === 'switch' ? 'switch' : 'host'} ${device.face}`}
+                        style={{
+                          top: `${top}%`, height: `${height}%`,
+                          left: half && device.face === 'rear' ? '50%' : 0,
+                          right: 'auto',
+                          width: half ? '50%' : '100%',
+                        }}
+                        title={`${asset?.name ?? '设备'} · ${placementFaceLabel(device)}`}
                       />
                     )
                   })}

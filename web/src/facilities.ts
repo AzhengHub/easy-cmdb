@@ -25,11 +25,16 @@ export interface Rack extends RackFields {
   version: number
 }
 
+export type RackFace = 'front' | 'rear'
+export type PlacementDepth = 'full' | 'half'
+
 export interface Placement {
   rackId: number
   assetId: number
   startU: number
   units: number
+  face: RackFace
+  depth: PlacementDepth
   version: number
 }
 
@@ -59,6 +64,28 @@ export function isMountKind(kind: Asset['kind']): kind is MountKind {
 export function uRange(placement: Pick<Placement, 'startU' | 'units'>) {
   const { startU, units } = placement
   return units === 1 ? 'U' + startU : 'U' + startU + '–U' + (startU + units - 1)
+}
+
+type PlacementShape = Pick<Placement, 'assetId' | 'startU' | 'units' | 'face' | 'depth'>
+
+export function placementsConflict(left: PlacementShape, right: PlacementShape) {
+  if (left.assetId === right.assetId) return false
+  if (left.startU > right.startU + right.units - 1 || right.startU > left.startU + left.units - 1) return false
+  if (left.depth === 'full' || right.depth === 'full') return true
+  return left.face === right.face
+}
+
+export function placementFaceLabel(placement: Pick<Placement, 'face' | 'depth'>) {
+  if (placement.depth === 'full') return '全深'
+  return placement.face === 'front' ? '前半深' : '后半深'
+}
+
+export function occupiedUnits(placements: Placement[]) {
+  const units = new Set<number>()
+  for (const placement of placements) {
+    for (let unit = placement.startU; unit < placement.startU + placement.units; unit++) units.add(unit)
+  }
+  return units
 }
 
 export function assetLocations(layout: Facilities, links: Link[]) {
