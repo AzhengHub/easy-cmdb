@@ -202,9 +202,17 @@ export interface SearchResult {
   color?: string
 }
 
+export type Role = 'admin' | 'operator' | 'viewer'
+
 export interface User {
   username: string
-  role: 'admin' | 'operator' | 'viewer'
+  role: Role
+}
+
+export interface UserFields {
+  username: string
+  password?: string
+  role: Role
 }
 
 export interface Captcha {

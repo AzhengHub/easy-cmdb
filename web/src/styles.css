@@ -239,6 +239,10 @@ html[data-theme="dark"] .import-error-row strong { color: #ff7875; }
 .change-field ins { color: #389e0d; text-decoration: none; }
 html[data-theme="dark"] .change-field ins { color: #73d13d; }
 
+/* Account management */
+.user-role-hint { margin-bottom: 14px; }
+.user-role-hint .ant-tag { min-width: 56px; text-align: center; }
+
 /* IPAM */
 .ipam-alert { margin-bottom: 12px; }
 .ipam-stats { margin-bottom: 14px; }

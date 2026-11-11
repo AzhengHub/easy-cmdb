@@ -11,7 +11,7 @@ import {
   AimOutlined, ApartmentOutlined, ApiOutlined, CloudServerOutlined,
   DeleteOutlined, DesktopOutlined, DownloadOutlined, EditOutlined, FilterOutlined, GlobalOutlined, HistoryOutlined,
   HddOutlined, HomeOutlined, LockOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoonOutlined, PlusOutlined, ReloadOutlined,
-  SearchOutlined, SettingOutlined, StarFilled, StarOutlined, SunOutlined, TagsOutlined, UploadOutlined, UserOutlined,
+  SearchOutlined, SettingOutlined, StarFilled, StarOutlined, SunOutlined, TagsOutlined, TeamOutlined, UploadOutlined, UserOutlined,
 } from '@ant-design/icons'
 import { api, apiCSV, APIError } from './api'
 import type { Asset, AssetFields, Captcha, Change, ImportPreview, Kind, Link, LinkKind, Subnet, Tag as TagItem, User } from './api'
@@ -28,6 +28,7 @@ import { GlobalSearch } from './components/GlobalSearch'
 import { IPAddressView } from './components/IPAddressView'
 import { IpamView } from './components/IpamView'
 import { TagManager } from './components/TagManager'
+import { UserManager } from './components/UserManager'
 import { VLANView } from './components/VLANView'
 import { Wordmark } from './components/Wordmark'
 
@@ -233,6 +234,14 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   const [bulkTagSaving, setBulkTagSaving] = useState(false)
   const [bulkTagError, setBulkTagError] = useState('')
 
+  const systemChildren: NavLeaf[] = [
+    { key: 'changes', label: '变更记录', icon: <HistoryOutlined /> },
+    { key: 'tags', label: '标签管理', icon: <TagsOutlined /> },
+    { key: 'password', label: '更改密码', icon: <LockOutlined /> },
+  ]
+  if (user?.role === 'admin') {
+    systemChildren.splice(1, 0, { key: 'users', label: '用户管理', icon: <TeamOutlined /> })
+  }
   const navigation: (NavLeaf | NavGroup)[] = [
     { key: 'home', label: '首页', icon: <HomeOutlined /> },
     { key: 'assets', label: '全部资产', icon: <HddOutlined /> },
@@ -250,15 +259,11 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
     },
     {
       key: 'system', label: '系统管理', icon: <SettingOutlined />,
-      children: [
-        { key: 'changes', label: '变更记录', icon: <HistoryOutlined /> },
-        { key: 'tags', label: '标签管理', icon: <TagsOutlined /> },
-        { key: 'password', label: '更改密码', icon: <LockOutlined /> },
-      ],
+      children: systemChildren,
     },
   ]
   const navLeaves = navigation.flatMap(item => 'children' in item ? item.children : [item])
-  const activePage = navLeaves.find(item => item.key === page)!
+  const activePage = navLeaves.find(item => item.key === page) ?? { key: 'home', label: '首页', icon: <HomeOutlined /> }
   const selectedRoom = facilities.rooms.find(room => room.id === facilityRoomId)
   const pageTitle = page === 'facilities' ? (selectedRoom?.name ?? '数据中心') : activePage.label
   const editable = user?.role !== 'viewer'
@@ -283,7 +288,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   const scoped = useMemo(() => {
     if (page === 'assets') return assets
     if (page === 'home' || page === 'changes' || page === 'password' || page === 'facilities' ||
-      page === 'ipam' || page === 'ip-addresses' || page === 'vlans') return []
+      page === 'ipam' || page === 'ip-addresses' || page === 'vlans' || page === 'users') return []
     return assets.filter(asset => asset.kind === page)
   }, [assets, page])
   const filtered = useMemo(() => {
@@ -1162,6 +1167,10 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
           )}
 
           {page === 'tags' && <TagManager editable={editable} onSessionError={e => handleError(e)} onChanged={setAllTags} onShowAssets={showTagAssets} />}
+
+          {page === 'users' && user?.role === 'admin' && (
+            <UserManager currentUsername={user.username} onSessionError={e => handleError(e)} />
+          )}
 
           {page === 'password' && <ChangePassword onSubmit={changePassword} />}
 
