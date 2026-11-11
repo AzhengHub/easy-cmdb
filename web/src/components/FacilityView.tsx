@@ -9,8 +9,8 @@ import {
 } from '@ant-design/icons'
 import { api, APIError } from '../api'
 import type { Asset, Link } from '../api'
-import { assetLocations, isMountKind, locationLabel, mountKinds } from '../facilities'
-import type { AssetLocation, Facilities, MountKind, Placement, Rack, RackFields, Room, RoomFields } from '../facilities'
+import { assetLocations, isMountKind, locationLabel, mountKinds, occupiedUnits, placementsConflict } from '../facilities'
+import type { AssetLocation, Facilities, MountKind, Placement, PlacementDepth, Rack, RackFace, RackFields, Room, RoomFields } from '../facilities'
 import { RackCardGrid } from './RackCardGrid'
 import { RackDetailDrawer } from './RackDetailDrawer'
 import { RoomScene } from './RoomScene'
@@ -44,6 +44,8 @@ interface MountDraft {
   address: string
   startU: number
   units: number
+  face: RackFace
+  depth: PlacementDepth
 }
 
 export function FacilityView({ roomId, onRoomChange, openRackId, onRackOpened, layout, assets, links, editable, dark, focus, reload, onOpenAsset, bookmarkedRacks, onToggleRackBookmark, onSessionError }: Props) {
@@ -75,7 +77,8 @@ export function FacilityView({ roomId, onRoomChange, openRackId, onRackOpened, l
   const roomPlacements = useMemo(() => layout.placements.filter(item => rackIds.has(item.rackId)), [layout.placements, rackIds])
   const devices = roomPlacements.filter(item => item.rackId === rackId)
   const totalRoomU = racks.reduce((sum, item) => sum + item.heightU, 0)
-  const usedRoomU = roomPlacements.reduce((sum, item) => sum + item.units, 0)
+  const usedRoomU = racks.reduce((sum, item) =>
+    sum + occupiedUnits(roomPlacements.filter(placement => placement.rackId === item.id)).size, 0)
   const roomUtilization = totalRoomU ? Math.round(usedRoomU / totalRoomU * 100) : 0
   const byId = useMemo(() => new Map(assets.map(asset => [asset.id, asset])), [assets])
   const locations = useMemo(() => assetLocations(layout, links), [layout, links])
@@ -263,10 +266,11 @@ export function FacilityView({ roomId, onRoomChange, openRackId, onRackOpened, l
     }, '机柜位置已更新')
   }
 
-  function freePosition(units: number, ignore = 0) {
+  function freePosition(units: number, ignore = 0, face: RackFace = 'front', depth: PlacementDepth = 'full') {
     if (!rack) return 1
     for (let start = 1; start + units - 1 <= rack.heightU; start++) {
-      if (!devices.some(item => item.assetId !== ignore && start < item.startU + item.units && start + units > item.startU)) return start
+      const candidate = { assetId: ignore, startU: start, units, face, depth }
+      if (!devices.some(item => placementsConflict(candidate, item))) return start
     }
     return 1
   }
@@ -276,6 +280,8 @@ export function FacilityView({ roomId, onRoomChange, openRackId, onRackOpened, l
     const asset = value && byId.get(value.assetId)
     const canMove = asset && candidates.some(item => item.id === asset.id)
     if (value && !canMove) return
+    const face = value?.face ?? 'front'
+    const depth = value?.depth ?? 'full'
     setMountDraft({
       mode: value || candidates.length ? 'existing' : 'new',
       assetId: value?.assetId ?? 0,
@@ -283,19 +289,47 @@ export function FacilityView({ roomId, onRoomChange, openRackId, onRackOpened, l
       kind: 'host',
       name: '',
       address: '',
-      startU: value?.startU ?? freePosition(1),
+      startU: value?.startU ?? freePosition(1, 0, face, depth),
       units: value?.units ?? 1,
+      face,
+      depth,
+    })
+  }
+
+  function editMountAt(startU: number, face: RackFace) {
+    resetForms()
+    const units = 2
+    const safeStart = rack ? Math.max(1, Math.min(startU, rack.heightU - units + 1)) : startU
+    setMountDraft({
+      mode: candidates.length ? 'existing' : 'new',
+      assetId: 0,
+      version: 0,
+      kind: 'host',
+      name: '',
+      address: '',
+      startU: safeStart,
+      units,
+      face,
+      depth: 'full',
     })
   }
 
   function changeDevice(next = mountDraft) {
     if (!next) return
     const previous = mounted.get(next.assetId)
+    const face = previous?.face ?? next.face
+    const depth = previous?.depth ?? next.depth
+    const units = previous?.units ?? next.units
+    const startU = previous?.rackId === rackId
+      ? previous.startU
+      : (!rack || next.startU + units - 1 <= rack.heightU ? next.startU : freePosition(units, next.assetId, face, depth))
     setMountDraft({
       ...next,
       version: previous?.version ?? 0,
-      units: previous?.units ?? 1,
-      startU: previous?.rackId === rackId ? previous.startU : freePosition(previous?.units ?? 1, next.assetId),
+      units,
+      face,
+      depth,
+      startU,
     })
   }
 
@@ -305,14 +339,14 @@ export function FacilityView({ roomId, onRoomChange, openRackId, onRackOpened, l
       changeDevice(next)
     } else {
       const units = next.kind === 'switch' ? 1 : 2
-      setMountDraft({ ...next, units, startU: freePosition(units) })
+      setMountDraft({ ...next, units, startU: freePosition(units, 0, next.face, next.depth) })
     }
   }
 
   function saveMount() {
     if (!mountDraft || !rack) return
-    const { startU, units, mode, assetId, version, kind, name, address } = mountDraft
-    const fields = { rackId: rack.id, startU, units }
+    const { startU, units, mode, assetId, version, kind, name, address, face, depth } = mountDraft
+    const fields = { rackId: rack.id, startU, units, face, depth }
     const create = mode === 'new'
     if (!create && !assetId) return
     void mutate(() => create
@@ -333,7 +367,7 @@ export function FacilityView({ roomId, onRoomChange, openRackId, onRackOpened, l
   function moveDevice(value: Placement, startU: number) {
     if (!rack) return
     void mutate(() => api<Placement>('/assets/' + value.assetId + '/placement', 'PUT', {
-      rackId: rack.id, startU, units: value.units, version: value.version,
+      rackId: rack.id, startU, units: value.units, face: value.face, depth: value.depth, version: value.version,
     }), placed => setFocused(placed.assetId), '设备位置已更新')
   }
 
@@ -378,6 +412,20 @@ export function FacilityView({ roomId, onRoomChange, openRackId, onRackOpened, l
       )}
       <Form.Item label="起始 U 位"><InputNumber min={1} max={rack.heightU} value={mountDraft.startU} onChange={value => setMountDraft({ ...mountDraft, startU: value ?? 1 })} /></Form.Item>
       <Form.Item label="占用 U 数"><InputNumber min={1} max={rack.heightU} value={mountDraft.units} onChange={value => setMountDraft({ ...mountDraft, units: value ?? 1 })} /></Form.Item>
+      <Form.Item label="安装面">
+        <Select
+          style={{ width: 100 }} value={mountDraft.face}
+          onChange={face => setMountDraft({ ...mountDraft, face })}
+          options={[{ value: 'front', label: '前面' }, { value: 'rear', label: '后面' }]}
+        />
+      </Form.Item>
+      <Form.Item label="深度">
+        <Select
+          style={{ width: 110 }} value={mountDraft.depth}
+          onChange={depth => setMountDraft({ ...mountDraft, depth })}
+          options={[{ value: 'full', label: '全深设备' }, { value: 'half', label: '半深设备' }]}
+        />
+      </Form.Item>
       <Form.Item>
         <Space>
           <Button type="primary" htmlType="submit" loading={busy} disabled={mountDraft.mode === 'existing' && !mountDraft.assetId}>
@@ -629,7 +677,7 @@ export function FacilityView({ roomId, onRoomChange, openRackId, onRackOpened, l
         onEditRack={value => { setRackDrawerOpen(false); editRack(value) }}
         onMount={() => editMount()}
         onEditPlacement={value => editMount(value)}
-        onUnmount={unmountDevice} onMove={moveDevice}
+        onUnmount={unmountDevice} onMove={moveDevice} onMountAt={editMountAt}
       />
     </div>
   )

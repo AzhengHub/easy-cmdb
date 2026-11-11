@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { Segmented } from 'antd'
 import type { Asset } from '../api'
-import { uRange } from '../facilities'
-import type { Placement, Rack } from '../facilities'
+import { occupiedUnits, placementFaceLabel, placementsConflict, uRange } from '../facilities'
+import type { Placement, Rack, RackFace } from '../facilities'
 import { RackDeviceSvg } from './RackDeviceSvg'
 
 interface Props {
@@ -14,25 +15,26 @@ interface Props {
   busy: boolean
   onOpen: (assetId: number) => void
   onMove: (placement: Placement, startU: number) => void
+  onMountAt?: (startU: number, face: RackFace) => void
 }
 
 const defaultUnitHeight = 22
 
 function overlaps(devices: Placement[], placement: Placement, startU: number) {
-  const end = startU + placement.units - 1
-  return devices.some(item => item.assetId !== placement.assetId
-    && startU <= item.startU + item.units - 1
-    && end >= item.startU)
+  return devices.some(item => placementsConflict({ ...placement, startU }, item))
 }
 
-export function RackElevation({ rack, devices, assets, focused, editable, busy, onOpen, onMove }: Props) {
+export function RackElevation({ rack, devices, assets, focused, editable, busy, onOpen, onMove, onMountAt }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const frameRef = useRef<HTMLDivElement>(null)
   const suppressClick = useRef(false)
   const dragRef = useRef<{ placement: Placement; startU: number; valid: boolean } | null>(null)
   const [drag, setDrag] = useState<{ placement: Placement; startU: number; valid: boolean } | null>(null)
   const [unitHeight, setUnitHeight] = useState(defaultUnitHeight)
+  const [face, setFace] = useState<RackFace>('front')
   const units = Array.from({ length: rack.heightU }, (_, index) => rack.heightU - index)
+  const visibleDevices = devices.filter(device => device.depth === 'full' || device.face === face)
+  const occupied = occupiedUnits(visibleDevices)
 
   useEffect(() => {
     const container = scrollRef.current
@@ -110,7 +112,19 @@ export function RackElevation({ rack, devices, assets, focused, editable, busy, 
   return (
     <div className="rack-elevation" style={{ '--rack-u-height': `${unitHeight}px` } as CSSProperties}>
       <div className="rack-stage-head">
-        <span className="rack-view-label"><span className="rack-view-led" />前视图</span>
+        <div className="rack-face-switch">
+          <Segmented
+            size="small" value={face} onChange={value => setFace(value as RackFace)}
+            options={[
+              { value: 'front', label: '前视图' },
+              { value: 'rear', label: '后视图' },
+            ]}
+          />
+          <span className="muted">
+            {visibleDevices.length} 台设备 · 已占用 {occupied.size}U
+            {face === 'rear' ? '（含全深设备）' : ''}
+          </span>
+        </div>
         <span className="muted">拖动设备可调整 U 位</span>
       </div>
       <div
@@ -127,10 +141,18 @@ export function RackElevation({ rack, devices, assets, focused, editable, busy, 
             style={{ height: rack.heightU * unitHeight }}
           >
             <div className="rack-unit-lines" style={{ gridTemplateRows: `repeat(${rack.heightU}, ${unitHeight}px)` }}>
-              {units.map(unit => <span key={unit} className="rack-unit-line" />)}
+              {units.map(unit => occupied.has(unit) || !onMountAt
+                ? <span key={unit} className="rack-unit-line" />
+                : (
+                  <button
+                    key={unit} type="button" className="rack-unit-line rack-unit-slot"
+                    title={`在 U${unit} 上架设备`} aria-label={`在 U${unit} 上架设备`}
+                    onClick={() => onMountAt(unit, face)}
+                  />
+                ))}
             </div>
             <div className="rack-device-layer">
-              {devices.map(device => {
+              {visibleDevices.map(device => {
                 const asset = assets.get(device.assetId)
                 const kind = asset?.kind ?? 'host'
                 const top = (rack.heightU - (device.startU + device.units - 1)) * unitHeight
@@ -142,8 +164,8 @@ export function RackElevation({ rack, devices, assets, focused, editable, busy, 
                     data-asset-id={device.assetId} data-focused={focused === device.assetId}
                     style={{ top, height }}
                     draggable={editable && !busy}
-                    title={`${asset?.name ?? '资产 #' + device.assetId} · ${uRange(device)}`}
-                    aria-label={`${asset?.name ?? '资产 #' + device.assetId}，${uRange(device)}`}
+                    title={`${asset?.name ?? '资产 #' + device.assetId} · ${uRange(device)} · ${placementFaceLabel(device)}`}
+                    aria-label={`${asset?.name ?? '资产 #' + device.assetId}，${uRange(device)}，${placementFaceLabel(device)}`}
                     onClick={() => click(device.assetId)}
                     onDragStart={event => startDrag(event, device)}
                     onDragEnd={endDrag}
@@ -167,7 +189,7 @@ export function RackElevation({ rack, devices, assets, focused, editable, busy, 
           </div>
 
           <div className="rack-annotations">
-            {devices.map(device => {
+            {visibleDevices.map(device => {
               const asset = assets.get(device.assetId)
               const top = (rack.heightU - (device.startU + device.units - 1)) * unitHeight
               const height = device.units * unitHeight - 3

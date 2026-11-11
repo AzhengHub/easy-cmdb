@@ -6,8 +6,8 @@ import {
   CloseOutlined, DeleteOutlined, EditOutlined, MenuOutlined, PlusOutlined, SettingOutlined, StarFilled, StarOutlined,
 } from '@ant-design/icons'
 import type { Asset } from '../api'
-import { mountKinds, uRange } from '../facilities'
-import type { MountKind, Placement, Rack, Room } from '../facilities'
+import { mountKinds, occupiedUnits, placementFaceLabel, uRange } from '../facilities'
+import type { MountKind, Placement, Rack, RackFace, Room } from '../facilities'
 import { RackElevation } from './RackElevation'
 
 interface Props {
@@ -29,6 +29,7 @@ interface Props {
   onEditPlacement: (placement: Placement) => void
   onUnmount: (placement: Placement) => void
   onMove: (placement: Placement, startU: number) => void
+  onMountAt: (startU: number, face: RackFace) => void
   bookmarked: boolean
   onToggleBookmark: () => void
 }
@@ -47,16 +48,21 @@ function statusLabel(status?: string) {
 
 export function RackDetailDrawer({
   open, rack, room, devices, assets, editable, busy, focused, feedback, error, mountForm,
-  onClose, onOpenAsset, onEditRack, onMount, onEditPlacement, onUnmount, onMove,
+  onClose, onOpenAsset, onEditRack, onMount, onEditPlacement, onUnmount, onMove, onMountAt,
   bookmarked, onToggleBookmark,
 }: Props) {
   const [tab, setTab] = useState('rack')
   if (!rack) return null
 
-  const used = devices.reduce((sum, item) => sum + item.units, 0)
+  const occupied = occupiedUnits(devices)
+  const used = occupied.size
+  const frontUsed = occupiedUnits(devices.filter(item => item.depth === 'full' || item.face === 'front')).size
+  const rearUsed = occupiedUnits(devices.filter(item => item.depth === 'full' || item.face === 'rear')).size
   const percent = Math.round(used / rack.heightU * 100)
   const hostCount = devices.filter(item => assets.get(item.assetId)?.kind === 'host').length
   const switchCount = devices.filter(item => assets.get(item.assetId)?.kind === 'switch').length
+  const fullDepthCount = devices.filter(item => item.depth === 'full').length
+  const halfDepthCount = devices.length - fullDepthCount
 
   return (
     <Drawer
@@ -77,7 +83,7 @@ export function RackDetailDrawer({
             {editable && (
               <>
                 <Button icon={<SettingOutlined />} disabled={busy} onClick={() => onEditRack(rack)}>编辑机柜</Button>
-                <Button type="primary" icon={<PlusOutlined />} disabled={busy || used >= rack.heightU} onClick={onMount}>上架设备</Button>
+                <Button type="primary" icon={<PlusOutlined />} disabled={busy} onClick={onMount}>上架设备</Button>
               </>
             )}
             <Button type="text" icon={<CloseOutlined />} onClick={onClose} aria-label="关闭" />
@@ -97,7 +103,7 @@ export function RackDetailDrawer({
           <div className="rack-drawer-usage">
             <div><span>利用率</span><strong>{percent}%</strong></div>
             <Progress percent={percent} showInfo={false} size="small" />
-            <small>物理机 {hostCount} · 交换机 {switchCount}</small>
+            <small>物理机 {hostCount} · 交换机 {switchCount} · 全深 {fullDepthCount}</small>
           </div>
         </div>
 
@@ -113,6 +119,7 @@ export function RackDetailDrawer({
                   <RackElevation
                     rack={rack} devices={devices} assets={assets} focused={focused}
                     editable={editable} busy={busy} onOpen={onOpenAsset} onMove={onMove}
+                    onMountAt={editable ? onMountAt : undefined}
                   />
                 </div>
               ),
@@ -138,7 +145,9 @@ export function RackDetailDrawer({
                           <span className={`rack-drawer-device-dot ${asset?.status ?? ''}`} />
                           <div>
                             <Button type="link" onClick={() => onOpenAsset(item.assetId)}>{nameOf(assets, item.assetId)}</Button>
-                            <span className="muted">{asset ? mountKinds[asset.kind as MountKind] : '设备'} · {uRange(item)}</span>
+                            <span className="muted">
+                              {asset ? mountKinds[asset.kind as MountKind] : '设备'} · {uRange(item)} · {placementFaceLabel(item)}
+                            </span>
                           </div>
                           <Tag bordered={false}>{statusLabel(asset?.status)}</Tag>
                         </div>
@@ -160,6 +169,9 @@ export function RackDetailDrawer({
                     { key: 'position', label: '平面位置', children: `第 ${rack.row} 行，第 ${rack.column} 列` },
                     { key: 'rotation', label: '朝向', children: rack.rotation + '°' },
                     { key: 'used', label: '已用 U 位', children: used + 'U' },
+                    { key: 'front', label: '前视占用', children: frontUsed + 'U' },
+                    { key: 'rear', label: '后视占用', children: rearUsed + 'U' },
+                    { key: 'depth', label: '安装深度', children: `全深 ${fullDepthCount} · 半深 ${halfDepthCount}` },
                     { key: 'free', label: '剩余 U 位', children: (rack.heightU - used) + 'U' },
                     { key: 'rate', label: '利用率', children: percent + '%' },
                   ]}
