@@ -70,7 +70,34 @@ func Initialize(ctx context.Context, db *sql.DB) error {
 	if err := ensureIPAMSchema(ctx, tx); err != nil {
 		return fmt.Errorf("初始化 IPAM 表: %w", err)
 	}
+	if err := ensureFacilitySchema(ctx, tx); err != nil {
+		return fmt.Errorf("初始化机柜字段: %w", err)
+	}
 	return tx.Commit()
+}
+
+// ensureFacilitySchema adds the rack face and mounting depth fields to an
+// existing database. The placements table is absent in a few partial test
+// fixtures, so a missing table is treated as nothing to upgrade.
+func ensureFacilitySchema(ctx context.Context, tx *sql.Tx) error {
+	exists, err := tableExists(ctx, tx, "rack_placements")
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	if err := ensureColumn(ctx, tx, "rack_placements", "face", "TEXT NOT NULL DEFAULT 'front'"); err != nil {
+		return err
+	}
+	return ensureColumn(ctx, tx, "rack_placements", "depth", "TEXT NOT NULL DEFAULT 'full'")
+}
+
+func tableExists(ctx context.Context, tx *sql.Tx, table string) (bool, error) {
+	var exists bool
+	err := tx.QueryRowContext(ctx,
+		"SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name=$1)", table).Scan(&exists)
+	return exists, err
 }
 
 // ensureIPAMSchema adds the IPAM inventory fields introduced after the first

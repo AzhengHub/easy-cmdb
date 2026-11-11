@@ -144,6 +144,8 @@ CREATE TABLE rack_placements (
     rack_id INTEGER NOT NULL REFERENCES racks,
     start_u INTEGER NOT NULL CHECK (start_u BETWEEN 1 AND 80),
     units INTEGER NOT NULL CHECK (units BETWEEN 1 AND 80),
+    face TEXT NOT NULL DEFAULT 'front' CHECK (face IN ('front','rear')),
+    depth TEXT NOT NULL DEFAULT 'full' CHECK (depth IN ('full','half')),
     version INTEGER NOT NULL DEFAULT 1,
     CHECK (start_u + units - 1 <= 80)
 );

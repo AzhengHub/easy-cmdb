@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type RoomFields struct {
@@ -35,9 +36,11 @@ type Rack struct {
 }
 
 type PlacementFields struct {
-	RackID int64 `json:"rackId"`
-	StartU int   `json:"startU"`
-	Units  int   `json:"units"`
+	RackID int64  `json:"rackId"`
+	StartU int    `json:"startU"`
+	Units  int    `json:"units"`
+	Face   string `json:"face"`
+	Depth  string `json:"depth"`
 }
 
 type RackPlacement struct {
@@ -54,7 +57,7 @@ type Facilities struct {
 
 const roomColumns = "id,name,grid_columns,grid_rows,version"
 const rackColumns = "id,room_id,name,height_u,grid_col,grid_row,rotation,version"
-const placementColumns = "asset_id,rack_id,start_u,units,version"
+const placementColumns = "asset_id,rack_id,start_u,units,face,depth,version"
 
 func readRoom(row scanner) (Room, error) {
 	var room Room
@@ -70,8 +73,44 @@ func readRack(row scanner) (Rack, error) {
 
 func readPlacement(row scanner) (RackPlacement, error) {
 	var placement RackPlacement
-	err := row.Scan(&placement.AssetID, &placement.RackID, &placement.StartU, &placement.Units, &placement.Version)
+	err := row.Scan(&placement.AssetID, &placement.RackID, &placement.StartU, &placement.Units,
+		&placement.Face, &placement.Depth, &placement.Version)
 	return placement, err
+}
+
+func normalizePlacementFields(fields *PlacementFields) error {
+	fields.Face = strings.TrimSpace(fields.Face)
+	fields.Depth = strings.TrimSpace(fields.Depth)
+	if fields.Face == "" {
+		fields.Face = "front"
+	}
+	if fields.Depth == "" {
+		fields.Depth = "full"
+	}
+	switch fields.Face {
+	case "front", "rear":
+	default:
+		return invalidFacility("设备安装面无效")
+	}
+	switch fields.Depth {
+	case "full", "half":
+	default:
+		return invalidFacility("设备安装深度无效")
+	}
+	return nil
+}
+
+func placementConflict(candidate, existing RackPlacement) bool {
+	if candidate.AssetID == existing.AssetID {
+		return false
+	}
+	if candidate.StartU > existing.StartU+existing.Units-1 || existing.StartU > candidate.StartU+candidate.Units-1 {
+		return false
+	}
+	if candidate.Depth == "full" || existing.Depth == "full" {
+		return true
+	}
+	return candidate.Face == existing.Face
 }
 
 func facilityRows[T any](ctx context.Context, tx *sql.Tx, query string, scan func(scanner) (T, error)) ([]T, error) {
@@ -301,6 +340,12 @@ func mountable(kind string) bool {
 }
 
 func SavePlacement(ctx context.Context, db *sql.DB, assetID int64, newAsset *Fields, fields PlacementFields, version int, actor string) (RackPlacement, error) {
+	if err := normalizePlacementFields(&fields); err != nil {
+		return RackPlacement{}, err
+	}
+	if fields.StartU < 1 || fields.Units < 1 {
+		return RackPlacement{}, invalidFacility("起始 U 位和占用 U 数须为正整数")
+	}
 	tx, err := facilityTx(ctx, db)
 	if err != nil {
 		return RackPlacement{}, err
@@ -336,15 +381,28 @@ func SavePlacement(ctx context.Context, db *sql.DB, assetID int64, newAsset *Fie
 		}
 	}
 
-	var overlap bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM rack_placements
-		WHERE rack_id=$1 AND asset_id<>$2 AND start_u<$3+$4 AND start_u+units>$3)`,
-		rack.ID, assetID, fields.StartU, fields.Units).Scan(&overlap); err != nil {
+	rows, err := tx.QueryContext(ctx,
+		"SELECT "+placementColumns+" FROM rack_placements WHERE rack_id=$1 AND asset_id<>$2", rack.ID, assetID)
+	if err != nil {
 		return RackPlacement{}, err
 	}
-	if overlap {
-		return RackPlacement{}, invalidFacility("所选 U 位已被占用")
+	candidate := RackPlacement{PlacementFields: fields, AssetID: assetID}
+	for rows.Next() {
+		existing, err := readPlacement(rows)
+		if err != nil {
+			rows.Close()
+			return RackPlacement{}, err
+		}
+		if placementConflict(candidate, existing) {
+			rows.Close()
+			return RackPlacement{}, invalidFacility("所选 U 位已被占用")
+		}
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return RackPlacement{}, err
+	}
+	rows.Close()
 	if newAsset != nil {
 		asset, err = createAsset(ctx, tx, *newAsset, actor)
 		if err != nil {
@@ -354,10 +412,12 @@ func SavePlacement(ctx context.Context, db *sql.DB, assetID int64, newAsset *Fie
 
 	nextVersion := before.Version + 1
 	placement, err := readPlacement(tx.QueryRowContext(ctx, `
-		INSERT INTO rack_placements (asset_id,rack_id,start_u,units,version) VALUES ($1,$2,$3,$4,$5)
+		INSERT INTO rack_placements (asset_id,rack_id,start_u,units,face,depth,version)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)
 		ON CONFLICT (asset_id) DO UPDATE SET rack_id=EXCLUDED.rack_id,start_u=EXCLUDED.start_u,
-			units=EXCLUDED.units,version=EXCLUDED.version
-		RETURNING `+placementColumns, asset.ID, rack.ID, fields.StartU, fields.Units, nextVersion))
+			units=EXCLUDED.units,face=EXCLUDED.face,depth=EXCLUDED.depth,version=EXCLUDED.version
+		RETURNING `+placementColumns,
+		asset.ID, rack.ID, fields.StartU, fields.Units, fields.Face, fields.Depth, nextVersion))
 	if err != nil {
 		return RackPlacement{}, err
 	}
@@ -407,6 +467,7 @@ func writePlacementChange(ctx context.Context, tx *sql.Tx, asset Asset, actor, a
 			placement.RackID).Scan(&roomName, &rackName)
 		return map[string]any{
 			"roomName": roomName, "rackName": rackName, "startU": placement.StartU, "units": placement.Units,
+			"face": placement.Face, "depth": placement.Depth,
 		}, err
 	}
 	old, err := snapshot(before)
