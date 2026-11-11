@@ -38,11 +38,15 @@ export interface SubnetFields {
   gateway: string
   vlan: string
   notes: string
+  status?: string
+  role?: string
 }
 
 export interface Subnet extends SubnetFields {
   id: number
   version: number
+  vlanName?: string
+  vlanStatus?: string
   usable: number
   used: number
   free: number
@@ -50,7 +54,64 @@ export interface Subnet extends SubnetFields {
 
 export interface IPUsage {
   ip: string
+  /** Legacy source field kept while the older subnet view is still in use. */
   status: 'gateway' | 'asset' | 'allocated'
+  source: 'gateway' | 'asset' | 'allocated'
+  state: string
+  assetId?: number
+  assetName?: string
+  allocationId?: number
+  label?: string
+  dnsName?: string
+  role?: string
+  notes?: string
+  version?: number
+}
+
+export interface AllocationFields {
+  ip: string
+  assetId?: number
+  label: string
+  notes: string
+  status: string
+  dnsName: string
+  role: string
+}
+
+export interface Allocation extends AllocationFields {
+  id: number
+  subnetId: number
+  subnetName?: string
+  version: number
+  assetName?: string
+}
+
+export interface VLANFields {
+  vid: number
+  name: string
+  status: 'active' | 'reserved' | 'deprecated'
+  description: string
+  roomId?: number
+}
+
+export interface VLAN extends VLANFields {
+  id: number
+  version: number
+  roomName?: string
+  prefixCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface IPAddress {
+  key: string
+  ip: string
+  source: 'gateway' | 'asset' | 'allocated'
+  state: string
+  dnsName?: string
+  role?: string
+  subnetId: number
+  subnetName: string
   assetId?: number
   assetName?: string
   allocationId?: number
