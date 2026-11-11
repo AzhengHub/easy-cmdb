@@ -67,7 +67,75 @@ func Initialize(ctx context.Context, db *sql.DB) error {
 	if err := ensureTagSchema(ctx, tx); err != nil {
 		return fmt.Errorf("初始化标签表: %w", err)
 	}
+	if err := ensureIPAMSchema(ctx, tx); err != nil {
+		return fmt.Errorf("初始化 IPAM 表: %w", err)
+	}
 	return tx.Commit()
+}
+
+// ensureIPAMSchema adds the IPAM inventory fields introduced after the first
+// release. Every statement is idempotent so opening an older database upgrades
+// it in place without a separate migration command.
+func ensureIPAMSchema(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS vlans (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			vid INTEGER NOT NULL CHECK (vid BETWEEN 1 AND 4094),
+			name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
+			status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','reserved','deprecated')),
+			description TEXT NOT NULL DEFAULT '',
+			room_id INTEGER REFERENCES rooms ON DELETE SET NULL,
+			version INTEGER NOT NULL DEFAULT 1,
+			created_at TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+			updated_at TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+		);
+		CREATE UNIQUE INDEX IF NOT EXISTS vlans_vid_idx ON vlans (vid);
+		CREATE UNIQUE INDEX IF NOT EXISTS vlans_name_idx ON vlans (lower(name));
+	`); err != nil {
+		return err
+	}
+	columns := []struct {
+		table      string
+		name       string
+		definition string
+	}{
+		{"subnets", "status", "TEXT NOT NULL DEFAULT 'active'"},
+		{"subnets", "role", "TEXT NOT NULL DEFAULT ''"},
+		{"ip_allocations", "status", "TEXT NOT NULL DEFAULT 'active'"},
+		{"ip_allocations", "dns_name", "TEXT NOT NULL DEFAULT ''"},
+		{"ip_allocations", "role", "TEXT NOT NULL DEFAULT ''"},
+	}
+	for _, column := range columns {
+		if err := ensureColumn(ctx, tx, column.table, column.name, column.definition); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureColumn(ctx context.Context, tx *sql.Tx, table, name, definition string) error {
+	rows, err := tx.QueryContext(ctx, "PRAGMA table_info("+table+")")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var columnName, columnType string
+		var notNull, primaryKey int
+		var defaultValue any
+		if err := rows.Scan(&cid, &columnName, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return err
+		}
+		if columnName == name {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, "ALTER TABLE "+table+" ADD COLUMN "+name+" "+definition)
+	return err
 }
 
 // isUniqueViolation reports whether err is an SQLite uniqueness error.

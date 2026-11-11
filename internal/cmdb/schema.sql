@@ -45,6 +45,21 @@ CREATE UNIQUE INDEX asset_links_single_parent_idx
 ON asset_links (to_id, kind) WHERE kind = 'hosts';
 CREATE INDEX asset_links_to_idx ON asset_links (to_id);
 
+CREATE TABLE vlans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vid INTEGER NOT NULL CHECK (vid BETWEEN 1 AND 4094),
+    name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','reserved','deprecated')),
+    description TEXT NOT NULL DEFAULT '',
+    room_id INTEGER REFERENCES rooms ON DELETE SET NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE UNIQUE INDEX vlans_vid_idx ON vlans (vid);
+CREATE UNIQUE INDEX vlans_name_idx ON vlans (lower(name));
+
 CREATE TABLE subnets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 160),
@@ -52,6 +67,8 @@ CREATE TABLE subnets (
     gateway TEXT NOT NULL DEFAULT '',
     vlan TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('container','active','reserved','deprecated')),
+    role TEXT NOT NULL DEFAULT '',
     version INTEGER NOT NULL DEFAULT 1
 );
 
@@ -62,6 +79,9 @@ CREATE TABLE ip_allocations (
     asset_id INTEGER REFERENCES assets,
     label TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','reserved','deprecated','dhcp','slaac')),
+    dns_name TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL DEFAULT '' CHECK (role IN ('','loopback','secondary','vip','vrrp','hsrp','glbp','anycast')),
     version INTEGER NOT NULL DEFAULT 1,
     UNIQUE (subnet_id, ip)
 );
