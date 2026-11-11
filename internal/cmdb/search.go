@@ -20,6 +20,7 @@ type SearchResult struct {
 	RoomID   int64  `json:"roomId,omitempty"`
 	RackID   int64  `json:"rackId,omitempty"`
 	SubnetID int64  `json:"subnetId,omitempty"`
+	VLANID   int64  `json:"vlanId,omitempty"`
 	TagID    int64  `json:"tagId,omitempty"`
 	Color    string `json:"color,omitempty"`
 }
@@ -83,6 +84,12 @@ func Search(ctx context.Context, db *sql.DB, raw string) ([]SearchResult, error)
 		return nil, err
 	}
 	results = append(results, subnets...)
+
+	vlans, err := searchVLANs(ctx, db, pattern, prefix)
+	if err != nil {
+		return nil, err
+	}
+	results = append(results, vlans...)
 
 	ips, err := searchIPs(ctx, db, query, pattern)
 	if err != nil {
@@ -275,18 +282,16 @@ func searchSubnets(ctx context.Context, db *sql.DB, pattern, prefix string) ([]S
 	return out, rows.Err()
 }
 
-func searchIPs(ctx context.Context, db *sql.DB, query, pattern string) ([]SearchResult, error) {
+func searchVLANs(ctx context.Context, db *sql.DB, pattern, prefix string) ([]SearchResult, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT a.id, a.ip, a.subnet_id, s.name, COALESCE(a.asset_id, 0), COALESCE(asset.name, ''), COALESCE(a.label, '')
-		FROM ip_allocations a
-		JOIN subnets s ON s.id = a.subnet_id
-		LEFT JOIN assets asset ON asset.id = a.asset_id
-		WHERE a.ip LIKE ? ESCAPE '\'
-		   OR lower(a.label) LIKE ? ESCAPE '\'
-		   OR lower(asset.name) LIKE ? ESCAPE '\'
-		ORDER BY CASE WHEN a.ip = ? THEN 0 ELSE 1 END, a.ip
+		SELECT id, vid, name, status, description
+		FROM vlans
+		WHERE CAST(vid AS TEXT) LIKE ? ESCAPE '\'
+		   OR lower(name) LIKE ? ESCAPE '\'
+		   OR lower(description) LIKE ? ESCAPE '\'
+		ORDER BY CASE WHEN CAST(vid AS TEXT) LIKE ? ESCAPE '\' THEN 0 ELSE 1 END, vid
 		LIMIT ?`,
-		pattern, pattern, pattern, strings.TrimSpace(query), searchPerType,
+		pattern, pattern, pattern, prefix, searchPerType,
 	)
 	if err != nil {
 		return nil, err
@@ -296,12 +301,59 @@ func searchIPs(ctx context.Context, db *sql.DB, query, pattern string) ([]Search
 	var out []SearchResult
 	for rows.Next() {
 		var result SearchResult
-		var subnetName, assetName, label string
-		if err := rows.Scan(&result.ID, &result.Label, &result.SubnetID, &subnetName, &result.AssetID, &assetName, &label); err != nil {
+		var vid int
+		var name, status, description string
+		if err := rows.Scan(&result.ID, &vid, &name, &status, &description); err != nil {
+			return nil, err
+		}
+		result.Type = "vlan"
+		result.VLANID = result.ID
+		result.Label = "VLAN " + strconv.Itoa(vid) + " · " + name
+		result.Status = status
+		parts := []string{"VLAN " + strconv.Itoa(vid)}
+		if description != "" {
+			parts = append(parts, description)
+		}
+		result.Detail = strings.Join(parts, " · ")
+		out = append(out, result)
+	}
+	return out, rows.Err()
+}
+
+func searchIPs(ctx context.Context, db *sql.DB, query, pattern string) ([]SearchResult, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT a.id, a.ip, a.subnet_id, s.name, COALESCE(a.asset_id, 0), COALESCE(asset.name, ''),
+			COALESCE(a.label, ''), a.status, COALESCE(a.dns_name, '')
+		FROM ip_allocations a
+		JOIN subnets s ON s.id = a.subnet_id
+		LEFT JOIN assets asset ON asset.id = a.asset_id
+		WHERE a.ip LIKE ? ESCAPE '\'
+		   OR lower(a.label) LIKE ? ESCAPE '\'
+		   OR lower(a.dns_name) LIKE ? ESCAPE '\'
+		   OR lower(asset.name) LIKE ? ESCAPE '\'
+		ORDER BY CASE WHEN a.ip = ? THEN 0 ELSE 1 END, a.ip
+		LIMIT ?`,
+		pattern, pattern, pattern, pattern, strings.TrimSpace(query), searchPerType,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []SearchResult
+	for rows.Next() {
+		var result SearchResult
+		var subnetName, assetName, label, state, dnsName string
+		if err := rows.Scan(&result.ID, &result.Label, &result.SubnetID, &subnetName,
+			&result.AssetID, &assetName, &label, &state, &dnsName); err != nil {
 			return nil, err
 		}
 		result.Type = "ip"
+		result.Status = state
 		parts := []string{}
+		if dnsName != "" {
+			parts = append(parts, dnsName)
+		}
 		if label != "" {
 			parts = append(parts, label)
 		}
