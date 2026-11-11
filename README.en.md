@@ -165,6 +165,8 @@ A subnet stores its CIDR, gateway, status (container, active, reserved, or depre
 
 The IP addresses view combines manual allocations, asset addresses, and gateway addresses, with filters for subnet, source, status, and keyword. Manual allocations support status (active, reserved, deprecated, DHCP, or SLAAC), DNS name, role (loopback, secondary, VIP, VRRP, HSRP, GLBP, or anycast), linked asset, purpose, and notes, and can be edited or released.
 
+Free addresses in a subnet are shown in a paginated table with 10/20/50 rows per page and a page jump. Selecting `Allocate this address` fills the allocation form above, while the free and used counts remain visible for large prefixes.
+
 - IPv4 `/8` through `/30`; partial overlaps are rejected, while a parent prefix may contain child prefixes;
 - Asset addresses may contain multiple IPs separated by commas, semicolons, or spaces;
 - Used addresses include the gateway, asset addresses, and manual allocations;
@@ -177,9 +179,9 @@ The IP addresses view combines manual allocations, asset addresses, and gateway 
 
 Open the data center view (`数据中心`), create a named data center (a default grid is used), and add racks with a label, height, grid position, and orientation. Drag racks to vacant cells in the floor plan or edit their coordinates directly. The 3D overview supports rotation, zoom, rack selection, and opening device details.
 
-Use the rack elevation to mount an existing asset or create and mount a physical host or switch in one step. Set the starting rack unit and device height. dc-db validates overlaps and rack boundaries. Asset details link back to the data center and rack, and virtual machines follow their host relationship. Unmounting a device keeps its asset record.
+Use the rack elevation to mount an existing asset or create and mount a physical host or switch in one step. Set the starting rack unit, height, mounting face (front/rear), and depth (full/half). dc-db validates overlaps per face and depth: a full-depth device occupies both faces, while a half-depth device occupies only its selected face. Drag a device to move it, or click an empty unit to prefill the mount position. Asset details link back to the data center and rack, and virtual machines follow their host relationship. Unmounting a device keeps its asset record.
 
-Racks occupy grid cells in the data center layout. The floor plan, rack elevation, and 3D overview share the same placement data. Data center, rack, and placement changes appear in change history.
+The rack drawer switches between front and rear elevations and reports occupied units for each face. Device lists and rack details show mounting face and depth. Racks occupy grid cells in the data center layout. The floor plan, rack elevation, and 3D overview share the same placement data. Data center, rack, and placement changes appear in change history.
 
 ## Back up and restore
 
