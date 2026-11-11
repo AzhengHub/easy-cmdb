@@ -134,7 +134,7 @@ export interface Change {
   createdAt: string
 }
 
-export type SearchResultType = 'asset' | 'tag' | 'room' | 'rack' | 'subnet' | 'ip'
+export type SearchResultType = 'asset' | 'tag' | 'room' | 'rack' | 'subnet' | 'vlan' | 'ip'
 
 export interface ImportPreviewRow {
   row: number
@@ -190,6 +190,7 @@ export interface SearchResult {
   roomId?: number
   rackId?: number
   subnetId?: number
+  vlanId?: number
   tagId?: number
   color?: string
 }

@@ -14,6 +14,8 @@ interface Props {
   onRoom: (roomId: number) => void
   onRack: (roomId: number, rackId: number) => void
   onIpam: () => void
+  onIPAddress: () => void
+  onVLAN: () => void
   onTag: () => void
   onSearchAll: (query: string) => void
 }
@@ -24,6 +26,7 @@ const typeMeta: Record<SearchResultType, { label: string; icon: ReactNode }> = {
   rack: { label: '机柜', icon: <ClusterOutlined /> },
   tag: { label: '标签', icon: <TagsOutlined /> },
   subnet: { label: '网段', icon: <GlobalOutlined /> },
+  vlan: { label: 'VLAN', icon: <TagsOutlined /> },
   ip: { label: 'IP 地址', icon: <AimOutlined /> },
 }
 
@@ -32,9 +35,9 @@ const statusLabels: Record<string, string> = {
   online: '在线', offline: '离线', running: '运行中', stopped: '已停止', paused: '已暂停', unknown: '未知',
 }
 
-const typeOrder: SearchResultType[] = ['asset', 'tag', 'ip', 'room', 'rack', 'subnet']
+const typeOrder: SearchResultType[] = ['asset', 'tag', 'ip', 'room', 'rack', 'subnet', 'vlan']
 
-export function GlobalSearch({ onAsset, onRoom, onRack, onIpam, onTag, onSearchAll }: Props) {
+export function GlobalSearch({ onAsset, onRoom, onRack, onIpam, onIPAddress, onVLAN, onTag, onSearchAll }: Props) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
@@ -141,6 +144,8 @@ export function GlobalSearch({ onAsset, onRoom, onRack, onIpam, onTag, onSearchA
     else if (result.type === 'room' && result.roomId) onRoom(result.roomId)
     else if (result.type === 'rack' && result.roomId && result.rackId) onRack(result.roomId, result.rackId)
     else if (result.type === 'tag') onTag()
+    else if (result.type === 'vlan') onVLAN()
+    else if (result.type === 'ip') onIPAddress()
     else onIpam()
   }
 
@@ -183,7 +188,7 @@ export function GlobalSearch({ onAsset, onRoom, onRack, onIpam, onTag, onSearchA
       <Input
         ref={inputRef}
         allowClear prefix={<SearchOutlined />}
-        placeholder="搜索资产、标签、机柜、IP…"
+        placeholder="搜索资产、标签、机柜、IP、VLAN…"
         value={query}
         autoComplete="off"
         suffix={<kbd className="global-search-kbd">Ctrl K</kbd>}

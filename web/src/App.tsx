@@ -8,7 +8,7 @@ import {
 import type { TableColumnsType } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import {
-  ApartmentOutlined, ApiOutlined, CloudServerOutlined,
+  AimOutlined, ApartmentOutlined, ApiOutlined, CloudServerOutlined,
   DeleteOutlined, DesktopOutlined, DownloadOutlined, EditOutlined, FilterOutlined, GlobalOutlined, HistoryOutlined,
   HddOutlined, HomeOutlined, LockOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoonOutlined, PlusOutlined, ReloadOutlined,
   SearchOutlined, SettingOutlined, StarFilled, StarOutlined, SunOutlined, TagsOutlined, UploadOutlined, UserOutlined,
@@ -25,8 +25,10 @@ import { ChangePassword } from './components/ChangePassword'
 import { Dashboard } from './components/Dashboard'
 import { FacilityView } from './components/FacilityView'
 import { GlobalSearch } from './components/GlobalSearch'
+import { IPAddressView } from './components/IPAddressView'
 import { IpamView } from './components/IpamView'
 import { TagManager } from './components/TagManager'
+import { VLANView } from './components/VLANView'
 import { Wordmark } from './components/Wordmark'
 
 const { Header, Sider, Content } = Layout
@@ -238,7 +240,14 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
     { key: 'vm', label: '虚拟机', icon: <DesktopOutlined /> },
     { key: 'switch', label: '交换机', icon: <ApiOutlined /> },
     { key: 'facilities', label: '数据中心', icon: <ApartmentOutlined /> },
-    { key: 'ipam', label: 'IPAM', icon: <GlobalOutlined /> },
+    {
+      key: 'ipam', label: 'IPAM', icon: <GlobalOutlined />,
+      children: [
+        { key: 'ipam', label: '网段与 IP', icon: <GlobalOutlined /> },
+        { key: 'ip-addresses', label: 'IP 地址', icon: <AimOutlined /> },
+        { key: 'vlans', label: 'VLAN', icon: <TagsOutlined /> },
+      ],
+    },
     {
       key: 'system', label: '系统管理', icon: <SettingOutlined />,
       children: [
@@ -273,7 +282,8 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
   const scoped = useMemo(() => {
     if (page === 'assets') return assets
-    if (page === 'home' || page === 'changes' || page === 'password' || page === 'facilities' || page === 'ipam') return []
+    if (page === 'home' || page === 'changes' || page === 'password' || page === 'facilities' ||
+      page === 'ipam' || page === 'ip-addresses' || page === 'vlans') return []
     return assets.filter(asset => asset.kind === page)
   }, [assets, page])
   const filtered = useMemo(() => {
@@ -1079,7 +1089,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
         </div>
         <Menu
           className="app-menu" mode="inline" selectedKeys={[page]}
-          defaultOpenKeys={['system']}
+          defaultOpenKeys={['system', 'ipam']}
           items={navigation.map(item => 'children' in item
             ? {
                 key: item.key, icon: item.icon, label: item.label,
@@ -1110,6 +1120,8 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
                 goTo('facilities')
               }}
               onIpam={() => goTo('ipam')}
+              onIPAddress={() => goTo('ip-addresses')}
+              onVLAN={() => goTo('vlans')}
               onTag={() => goTo('tags')}
               onSearchAll={searchAllAssets}
             />
@@ -1172,6 +1184,21 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
               bookmarkedSubnets={subnetBookmarks} onToggleSubnetBookmark={toggleSubnetBookmark}
               onSessionError={e => handleError(e)}
               onChanged={() => void loadAll()}
+            />
+          )}
+
+          {page === 'ip-addresses' && (
+            <IPAddressView
+              editable={editable} assets={assets} subnets={subnets}
+              onOpenAsset={id => void openAsset(id)} onOpenSubnet={openSubnet}
+              onSessionError={e => handleError(e)} onChanged={() => void loadAll()}
+            />
+          )}
+
+          {page === 'vlans' && (
+            <VLANView
+              editable={editable} rooms={facilities.rooms}
+              onSessionError={e => handleError(e)} onChanged={() => void loadAll()}
             />
           )}
 
