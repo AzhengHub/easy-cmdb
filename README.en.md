@@ -84,7 +84,16 @@ viewer:
 The `系统管理` section contains:
 
 - **Change history**: review changes to assets, relationships, and facilities, filtered by asset, actor, or action, and export the current result; tag changes list added and removed tags
+- **User management**: administrator-only account management with administrator, operator, and viewer roles, plus password reset for other accounts
 - **Change password**: update the password for the signed-in account
+
+Roles are:
+
+- **Administrator**: all features, including user management;
+- **Operator**: manage assets, IPAM, tags, and data centers, but not accounts;
+- **Viewer**: read-only; every write request is rejected by the server.
+
+The last administrator cannot be deleted or demoted, and an administrator cannot delete or change their own role. Resetting a password invalidates that account's existing sessions.
 
 The All assets view covers physical hosts, virtual machines, and switches. Clicking a tag's asset count opens that tag's assets in the combined view.
 
