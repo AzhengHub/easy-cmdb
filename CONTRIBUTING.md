@@ -1,6 +1,6 @@
 # Contributing
 
-LinkCMDB is currently maintained by a single developer. Issues and pull requests are welcome, but reviews may take a few days.
+dc-db is currently maintained by a single developer. Issues and pull requests are welcome, but reviews may take a few days.
 
 ## Development setup
 
@@ -9,11 +9,11 @@ Requirements: Go 1.26+ and Node.js 22 LTS.
 ```bash
 npm --prefix web ci
 npm --prefix web run build
-go build -trimpath -o bin/linkcmdb ./cmd/linkcmdb
-./bin/linkcmdb serve
+go build -trimpath -o bin/dc-db ./cmd/dc-db
+./bin/dc-db serve
 ```
 
-The service listens on `127.0.0.1:8080`. The SQLite database defaults to `linkcmdb.db` in the working directory. Copy `config.example.yaml` to `config.yaml` to change the listen address, the database path, or the bootstrap accounts; `config.yaml` is ignored by Git.
+The service listens on `127.0.0.1:8080`. The SQLite database defaults to `dc-db.db` in the working directory. Copy `config.example.yaml` to `config.yaml` to change the listen address, the database path, or the bootstrap accounts; `config.yaml` is ignored by Git.
 
 ## Checks
 

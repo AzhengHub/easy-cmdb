@@ -43,7 +43,7 @@ export function GlobalSearch({ onAsset, onRoom, onRack, onIpam, onTag, onSearchA
   const [error, setError] = useState('')
   const [recent, setRecent] = useState<string[]>(() => {
     try {
-      const parsed: unknown = JSON.parse(localStorage.getItem('linkcmdb-recent-searches') ?? '[]')
+      const parsed: unknown = JSON.parse(localStorage.getItem('dc-db-recent-searches') ?? '[]')
       return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string').slice(0, 6) : []
     } catch {
       return []
@@ -101,7 +101,7 @@ export function GlobalSearch({ onAsset, onRoom, onRack, onIpam, onTag, onSearchA
     const next = [value, ...recent.filter(item => item.toLowerCase() !== value.toLowerCase())].slice(0, 6)
     setRecent(next)
     try {
-      localStorage.setItem('linkcmdb-recent-searches', JSON.stringify(next))
+      localStorage.setItem('dc-db-recent-searches', JSON.stringify(next))
     } catch {
       // Recent searches still work for this session.
     }
@@ -116,7 +116,7 @@ export function GlobalSearch({ onAsset, onRoom, onRack, onIpam, onTag, onSearchA
   function clearRecent() {
     setRecent([])
     try {
-      localStorage.removeItem('linkcmdb-recent-searches')
+      localStorage.removeItem('dc-db-recent-searches')
     } catch {
       // Ignore unavailable storage.
     }

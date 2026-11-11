@@ -2,13 +2,13 @@
 
 ## Supported versions
 
-LinkCMDB is pre-1.0. Only the latest commit on `main` receives security fixes.
+dc-db is pre-1.0. Only the latest commit on `main` receives security fixes.
 
 ## Reporting a vulnerability
 
 Please do not open a public issue for a security problem.
 
-Email **security@linkcmdb.com** with:
+Email **security@dc-db.com** with:
 
 - the affected version or commit,
 - a description of the issue and its impact,

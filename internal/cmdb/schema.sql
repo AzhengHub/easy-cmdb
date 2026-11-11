@@ -1,7 +1,7 @@
--- Easy CMDB SQLite schema.
+-- dc-db SQLite schema.
 --
 -- Executed once when a database file is created. This project is still in
--- development; after changing the schema, remove the local easy.db and let the
+-- development; after changing the schema, remove the local dc-db.db and let the
 -- next start recreate it from this file.
 
 CREATE TABLE assets (

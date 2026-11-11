@@ -79,7 +79,7 @@ function messageText(error: unknown) {
 
 function initialDark() {
   try {
-    const saved = localStorage.getItem('linkcmdb-theme')
+    const saved = localStorage.getItem('dc-db-theme')
     if (saved === 'dark') return true
     if (saved === 'light') return false
     return window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -107,7 +107,7 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
     try {
-      localStorage.setItem('linkcmdb-theme', dark ? 'dark' : 'light')
+      localStorage.setItem('dc-db-theme', dark ? 'dark' : 'light')
     } catch {
       // Storage may be unavailable in private browsing.
     }
@@ -170,7 +170,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultAssetColumns)
   const [pagination, setPagination] = useState(1)
   const [pageSize, setPageSize] = useState(() => {
-    const stored = Number(localStorage.getItem('linkcmdb-page-size'))
+    const stored = Number(localStorage.getItem('dc-db-page-size'))
     return [10, 20, 50].includes(stored) ? stored : defaultPageSize
   })
   const [importing, setImporting] = useState(false)
@@ -190,7 +190,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   const [allTags, setAllTags] = useState<TagItem[]>([])
   const [bookmarks, setBookmarks] = useState<number[]>(() => {
     try {
-      const parsed: unknown = JSON.parse(localStorage.getItem('linkcmdb-bookmarks') ?? '[]')
+      const parsed: unknown = JSON.parse(localStorage.getItem('dc-db-bookmarks') ?? '[]')
       return Array.isArray(parsed) ? parsed.filter((id): id is number => typeof id === 'number') : []
     } catch {
       return []
@@ -198,7 +198,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   })
   const [rackBookmarks, setRackBookmarks] = useState<number[]>(() => {
     try {
-      const parsed: unknown = JSON.parse(localStorage.getItem('linkcmdb-rack-bookmarks') ?? '[]')
+      const parsed: unknown = JSON.parse(localStorage.getItem('dc-db-rack-bookmarks') ?? '[]')
       return Array.isArray(parsed) ? parsed.filter((id): id is number => typeof id === 'number') : []
     } catch {
       return []
@@ -206,7 +206,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   })
   const [subnetBookmarks, setSubnetBookmarks] = useState<number[]>(() => {
     try {
-      const parsed: unknown = JSON.parse(localStorage.getItem('linkcmdb-subnet-bookmarks') ?? '[]')
+      const parsed: unknown = JSON.parse(localStorage.getItem('dc-db-subnet-bookmarks') ?? '[]')
       return Array.isArray(parsed) ? parsed.filter((id): id is number => typeof id === 'number') : []
     } catch {
       return []
@@ -334,7 +334,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
   useEffect(() => {
     try {
-      localStorage.setItem('linkcmdb-bookmarks', JSON.stringify(bookmarks))
+      localStorage.setItem('dc-db-bookmarks', JSON.stringify(bookmarks))
     } catch {
       // Bookmarks still work for this session when storage is unavailable.
     }
@@ -342,8 +342,8 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
   useEffect(() => {
     try {
-      localStorage.setItem('linkcmdb-rack-bookmarks', JSON.stringify(rackBookmarks))
-      localStorage.setItem('linkcmdb-subnet-bookmarks', JSON.stringify(subnetBookmarks))
+      localStorage.setItem('dc-db-rack-bookmarks', JSON.stringify(rackBookmarks))
+      localStorage.setItem('dc-db-subnet-bookmarks', JSON.stringify(subnetBookmarks))
     } catch {
       // Favorites still work for this session when storage is unavailable.
     }
@@ -351,7 +351,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
   useEffect(() => {
     try {
-      localStorage.setItem('linkcmdb-page-size', String(pageSize))
+      localStorage.setItem('dc-db-page-size', String(pageSize))
     } catch {
       // Page size still applies for this session when storage is unavailable.
     }
@@ -366,7 +366,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
     setFilterOpen(false)
     setFilterName('')
     try {
-      const raw = localStorage.getItem('linkcmdb-filters:' + page)
+      const raw = localStorage.getItem('dc-db-filters:' + page)
       const parsed: unknown = raw ? JSON.parse(raw) : []
       if (Array.isArray(parsed)) {
         setFilterPresets(parsed.filter((item): item is AssetFilterPreset => (
@@ -377,7 +377,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
       setFilterPresets([])
     }
     try {
-      const raw = localStorage.getItem('linkcmdb-columns:' + page)
+      const raw = localStorage.getItem('dc-db-columns:' + page)
       const parsed: unknown = raw ? JSON.parse(raw) : null
       const valid = Array.isArray(parsed)
         ? parsed.filter((key): key is string => typeof key === 'string' && assetColumnKeys.includes(key))
@@ -696,7 +696,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
   function persistFilterPresets(next: AssetFilterPreset[]) {    setFilterPresets(next)
     try {
-      localStorage.setItem('linkcmdb-filters:' + page, JSON.stringify(next))
+      localStorage.setItem('dc-db-filters:' + page, JSON.stringify(next))
     } catch {
       // Storage can be unavailable in private browsing; the in-memory list still works.
     }
@@ -743,7 +743,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
     const ordered = assetColumnKeys.filter(key => keys.includes(key))
     setVisibleColumns(ordered)
     try {
-      localStorage.setItem('linkcmdb-columns:' + page, JSON.stringify(ordered))
+      localStorage.setItem('dc-db-columns:' + page, JSON.stringify(ordered))
     } catch {
       // Keep the current in-memory column selection.
     }
@@ -803,7 +803,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
 
   function downloadImportErrors() {
     if (!importPreview?.errors.length) return
-    downloadCSV('linkcmdb-import-errors.csv', [
+    downloadCSV('dc-db-import-errors.csv', [
       ['行号', '错误说明'],
       ...importPreview.errors.map(error => [error.row, error.message]),
     ])
@@ -821,11 +821,11 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
         asset.tags?.map(tag => tag.name).join('; ') ?? '',
       ])
     }
-    downloadCSV('linkcmdb-assets.csv', rows)
+    downloadCSV('dc-db-assets.csv', rows)
   }
 
   function downloadTemplate() {
-    downloadCSV('linkcmdb-import-template.csv', [[
+    downloadCSV('dc-db-import-template.csv', [[
       '资源名称', '类型', '平台', '状态', '生命周期', '地址 / IP', 'CPU', '内存 MiB', '负责人', '环境', '备注', '扩展属性', '标签',
     ]])
   }
@@ -1011,7 +1011,7 @@ function Shell({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => vo
   if (!user) {
     return (
       <main className="login-page">
-        <section className="login-visual" aria-label="LinkCMDB 简介">
+        <section className="login-visual" aria-label="dc-db 简介">
           <div className="login-visual-content">
             <p className="login-visual-title">让资产与关系清晰可见</p>
             <p className="login-visual-description">集中管理基础设施资产、网络与配置。</p>

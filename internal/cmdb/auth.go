@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const sessionCookie = "linkcmdb_session"
+const sessionCookie = "dc-db_session"
 const sessionDuration = 12 * time.Hour
 const passwordIterations = 600000
 const defaultAdminUsername = "admin"

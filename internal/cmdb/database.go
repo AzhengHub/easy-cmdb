@@ -26,7 +26,7 @@ const sqliteOptions = "?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)" +
 // when it does not exist.
 func Open(path string) (*sql.DB, error) {
 	if path == "" {
-		path = "linkcmdb.db"
+		path = "dc-db.db"
 	}
 	if dir := filepath.Dir(path); dir != "." && dir != "" {
 		if err := os.MkdirAll(dir, 0o750); err != nil {

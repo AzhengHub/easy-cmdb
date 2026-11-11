@@ -1,4 +1,4 @@
-module github.com/linkcmdb/linkcmdb
+module github.com/dc-db/dc-db
 
 go 1.26.0
 

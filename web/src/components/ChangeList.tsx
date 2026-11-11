@@ -104,7 +104,7 @@ function downloadChanges(changes: Change[]) {
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
   const link = document.createElement('a')
   link.href = url
-  link.download = 'linkcmdb-changes.csv'
+  link.download = 'dc-db-changes.csv'
   link.click()
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
